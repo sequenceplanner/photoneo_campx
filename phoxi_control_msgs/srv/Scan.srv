@@ -1,0 +1,27 @@
+# Request
+
+# What should be done  ["connect", "capture", "freerun", "stop", "disconnect"]
+string command
+
+# Name the captured scene file
+string scene_name
+
+# Data format to save the capture in
+bool praw
+bool ply
+bool tif
+
+# Timeout criterion in milliseconds to compete the command
+uint32 timeout
+
+# Parameter setting to be used (specific item name like 'black_plate' for a specific item or one of the presets)
+string settings
+
+---
+# Reply
+
+# Success or fail message
+bool success
+
+# To debug
+string raw
