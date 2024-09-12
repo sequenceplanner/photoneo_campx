@@ -22,3 +22,15 @@ path = "src/main.rs"
 [[bin]]
 name = "connect"
 path = "tests/connect.rs"
+
+[[bin]]
+name = "freerun"
+path = "tests/freerun.rs"
+
+[[bin]]
+name = "stop"
+path = "tests/stop.rs"
+
+[[bin]]
+name = "capture"
+path = "tests/capture.rs"

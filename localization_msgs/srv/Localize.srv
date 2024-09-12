@@ -1,0 +1,45 @@
+# Request
+
+# What should be done  ["localize"]
+string command
+
+# Name of the pointcloud scene used to find the target in
+string scene_name
+
+# Name of the targeted item to be localized (a .plcf has to exist)
+string target_name
+
+# Name of the parent to change to once the items are localized
+# Move this handling to a separate node
+# string parent_name
+
+# ply, praw or live
+string source_format
+
+# Stop at timeout criterion in milliseconds
+uint32 stop_at_timeout
+
+# Stop when this number of targets is localized in the scene (minimum 1)
+uint32 stop_at_number
+
+# Parameter setting to be used (specific item name like 'black_plate' for a specific item or one of the presets)
+string settings
+
+---
+# Reply
+
+# Succesfully localized "number_of_items" items within "stop_at_timeout" time limit
+bool req_success
+
+# True if req_success is true or when at least 1 target is detected at timeout. 
+# False if no items detecded at timeout. 
+bool any_success
+
+# Number of items detected
+uint32 nr_of_items
+
+# Array of transforms for the detected items in the camera frame
+geometry_msgs/TransformStamped[] transforms
+
+# For debugging
+string raw_data

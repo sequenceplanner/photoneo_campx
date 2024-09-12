@@ -1,18 +1,4 @@
-use futures::{Stream, StreamExt};
-use r2r::{phoxi_control_msgs::srv::Scan, ServiceRequest};
-use serde_json::Value;
-use std::error::Error;
-use std::sync::{Arc, Mutex};
-use std::{
-    fs::File,
-    io::BufReader,
-};
-
-use std::io::{self, BufRead};
-use std::process::{Command, Stdio};
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
+use r2r::phoxi_control_msgs::srv::Scan;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
