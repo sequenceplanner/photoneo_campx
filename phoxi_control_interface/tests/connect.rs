@@ -23,7 +23,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tif: true,
         scene_name: "test_scene".to_string(),
         settings: "default".to_string(),
-        timeout: 3000
+        timeout: 3000,
+        praw_dir: "".to_string(),
+        ply_dir: "".to_string(),
+        tif_dir: "".to_string(),
     };
 
     match client.request(&req_msg) {

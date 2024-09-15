@@ -16,13 +16,15 @@
   <build_depend>FastRTPS</build_depend>
   <build_depend>phoxi_control_msgs</build_depend>
   <build_depend>std_msgs</build_depend>         
+  <build_depend>localization_msgs</build_depend>
 
   <exec_depend>rcl</exec_depend>                    
   <exec_depend>rcl_action</exec_depend>                      
   <exec_depend>rmw_fastrtps_cpp</exec_depend>                
   <exec_depend>FastRTPS</exec_depend>       
   <exec_depend>phoxi_control_msgs</exec_depend>                  
-  <exec_depend>std_msgs</exec_depend>                        
+  <exec_depend>std_msgs</exec_depend>         
+  <exec_depend>localization_msgs</exec_depend>               
 
   <export>
     <build_type>ament_cmake</build_type>

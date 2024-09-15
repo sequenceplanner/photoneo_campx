@@ -11,6 +11,11 @@ bool praw
 bool ply
 bool tif
 
+# Where to save the Data
+string praw_dir
+string ply_dir
+string tif_dir
+
 # Timeout criterion in milliseconds to compete the command
 uint32 timeout
 

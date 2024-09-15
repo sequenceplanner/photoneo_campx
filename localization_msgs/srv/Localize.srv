@@ -25,6 +25,11 @@ uint32 stop_at_number
 # Parameter setting to be used (specific item name like 'black_plate' for a specific item or one of the presets)
 string settings
 
+# Where to fing prepared items and recorded scenes
+string plcf_dir
+string ply_dir
+string praw_dir
+
 ---
 # Reply
 

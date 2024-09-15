@@ -135,6 +135,105 @@ fn call_blocking_exec(request: Localize::Request) -> Result<Vec<String>, io::Err
     }
 }
 
+
+struct ParsedResult {
+    success: bool,
+    stop_criteria_met: bool,
+    count: usize,
+    results: Vec<([[f64; 4]; 4], String)>,
+}
+
+impl ParsedResult {
+    fn new() -> Self {
+        ParsedResult {
+            success: false,
+            stop_criteria_met: false,
+            count: 0,
+            results: Vec::new(),
+        }
+    }
+}
+
+fn parse_result(request: &Localize::Request, data: &[Vec<u8>]) -> ParsedResult {
+    let mut parsed = ParsedResult::new();
+    let mut result_lines: Vec<usize> = Vec::new();
+
+    // Find "RESULT" lines
+    for (i, line) in data.iter().enumerate() {
+        let split_line: Vec<&[u8]> = line.split(|&c| c == b' ').collect();
+        if split_line.contains(&&b"RESULT"[..]) {
+            result_lines.push(i);
+        }
+    }
+
+    // If no result lines found, return default parsed result
+    if result_lines.is_empty() {
+        return parsed;
+    }
+
+    // Process result lines
+    for &index in &result_lines {
+        if index + 2 >= data.len() {
+            continue;
+        }
+
+        let m1_line = &data[index];
+        let m2_line = &data[index + 1];
+        let m3_line = &data[index + 2];
+
+        let m1: Vec<f64> = m1_line
+            .split(|&c| c == b' ')
+            .filter_map(|x| parse_float(x))
+            .collect();
+        let m2: Vec<f64> = m2_line
+            .split(|&c| c == b' ')
+            .filter_map(|x| parse_float(x))
+            .collect();
+        let m3: Vec<f64> = m3_line
+            .split(|&c| c == b' ')
+            .filter_map(|x| parse_float(x))
+            .collect();
+
+        let m4 = vec![0.0, 0.0, 0.0, 1.0];
+
+        // Add the parsed result
+        if m1.len() == 4 && m2.len() == 4 && m3.len() == 4 {
+            parsed.results.push((
+                [
+                    [m1[0], m1[1], m1[2], m1[3]],
+                    [m2[0], m2[1], m2[2], m2[3]],
+                    [m3[0], m3[1], m3[2], m3[3]],
+                    [m4[0], m4[1], m4[2], m4[3]],
+                ],
+                request.target_name.clone(),
+            ));
+
+            r2r::log_info!("DETECTED ITEMS: ", "{:?}", parsed.results);
+        }
+    }
+
+    parsed.count = parsed.results.len();
+
+    if request.stop_at_number as usize > parsed.count {
+        parsed.success = false;
+        parsed.stop_criteria_met = true;
+    } else {
+        parsed.success = true;
+        parsed.stop_criteria_met = true;
+    }
+
+    parsed
+}
+
+fn parse_float(data: &[u8]) -> Option<f64> {
+    if let Ok(string) = std::str::from_utf8(data) {
+        if string.contains('.') {
+            return string.parse::<f64>().ok();
+        }
+    }
+    None
+}
+
 fn prepare_arguments(request: &Localize::Request) -> Vec<String> {
     let capcom = capitalize_first(&request.command);
 
@@ -167,193 +266,152 @@ fn prepare_arguments(request: &Localize::Request) -> Vec<String> {
     // 2 - scene name
     args_list.push(request.scene_name.clone());
 
-    // 3 - save scan in .praw format
-    args_list.push(bool_to_arg(request.praw));
+    // 3 - target name
+    args_list.push(request.target_name.clone());
 
-    // 4 - save scan in .ply format
-    args_list.push(bool_to_arg(request.ply));
+    // 4 - source format
+    args_list.push(request.source_format.clone());
 
-    // 5 - save scan in .tif format
-    args_list.push(bool_to_arg(request.tif));
+    // 5 - stop at timeout criterion
+    args_list.push(request.stop_at_timeout.to_string());
 
-    // 6 - capturing_settings::shutter_multiplier
-    args_list.push(
-        settings["capturing_settings"]["shutter_multiplier"]["value"]
-            .as_i64()
-            .unwrap()
-            .to_string(),
-    );
+    // 6 - stop at number criterion
+    args_list.push(request.stop_at_number.to_string());
 
-    // 7 - capturing_settings::scan_multiplier
-    args_list.push(
-        settings["capturing_settings"]["scan_multiplier"]["value"]
-            .as_i64()
-            .unwrap()
-            .to_string(),
-    );
-
-    // 8 - capturing_settings::resolution
-    if parameters["name_identification"]
-        .as_str()
-        .unwrap()
-        .to_string()
-        == "photoneo_volvo"
-    {
-        args_list.push(resolution_to_arg(
-            &settings["capturing_settings"]["resolution"]["min"],
-        ));
-    } else {
-        args_list.push(resolution_to_arg(
-            &settings["capturing_settings"]["resolution"]["value"],
-        ));
-    }
-
-    // 9 - capturing_settings::camera_only_mode
+    // 7 - scene noise reduction
     args_list.push(bool_to_arg(
-        settings["capturing_settings"]["camera_only_mode"]["value"]
+        settings["localization_settings"]["scene_noise_reduction"]["value"]
+            .as_bool()
+            .unwrap()
+    ));
+
+    // 8 - smart memory
+    args_list.push(bool_to_arg(
+        settings["localization_settings"]["smart_memory"]["value"]
             .as_bool()
             .unwrap(),
     ));
 
-    // 10 - capturing_settings::ambient_light_suppression
-    args_list.push(bool_to_arg(
-        settings["capturing_settings"]["ambient_light_suppression"]["value"]
-            .as_bool()
-            .unwrap(),
-    ));
-
-    // 11 - capturing_settings::coding_strategy
+    // 9 - scene clustering level
     args_list.push(
-        settings["capturing_settings"]["coding_strategy"]["value"]
+        settings["localization_settings"]["scene_clustering_level"]["value"]
             .as_str()
             .unwrap()
             .to_string(),
     );
 
-    // 12 - capturing_settings::coding_quality
+    // 10 - scene minimal cluster size
     args_list.push(
-        settings["capturing_settings"]["coding_quality"]["value"]
+        settings["localization_settings"]["scene_minimal_cluster_size"]["value"]
+            .as_u64()
+            .unwrap()
+            .to_string(),
+    );
+
+    // 11 - scene maximal cluster size
+    args_list.push(
+        settings["localization_settings"]["scene_maximal_cluster_size"]["value"]
+            .as_u64()
+            .unwrap()
+            .to_string(),
+    );
+
+    // 12 - matching algorithm
+    args_list.push(
+        settings["localization_settings"]["matching_algorithm"]["value"]
             .as_str()
             .unwrap()
             .to_string(),
     );
 
-    // 13 - capturing_settings::texture_source
+    // 13 - model keypoints sampling
     args_list.push(
-        settings["capturing_settings"]["texture_source"]["value"]
+        settings["localization_settings"]["model_keypoints_sampling"]["value"]
             .as_str()
             .unwrap()
             .to_string(),
     );
 
-    // 14 - capturing_settings::single_pattern_exposure
+    // 14 - local search radius
     args_list.push(
-        settings["capturing_settings"]["single_pattern_exposure"]["value"]
-            .as_f64()
-            .unwrap()
-            .to_string(),
-    );
-
-    // 15 - capturing_settings::maximum_fps
-    args_list.push(
-        settings["capturing_settings"]["maximum_fps"]["value"]
-            .as_f64()
-            .unwrap()
-            .to_string(),
-    );
-
-    // 16 - capturing_settings::laser_power
-    args_list.push(
-        settings["capturing_settings"]["laser_power"]["value"]
-            .as_i64()
-            .unwrap()
-            .to_string(),
-    );
-
-    // 17 - capturing_settings::projection_offset_left
-    args_list.push(
-        settings["capturing_settings"]["projection_offset_left"]["value"]
-            .as_i64()
-            .unwrap()
-            .to_string(),
-    );
-
-    // 18 - capturing_settings::projection_offset_right
-    args_list.push(
-        settings["capturing_settings"]["projection_offset_right"]["value"]
-            .as_i64()
-            .unwrap()
-            .to_string(),
-    );
-
-    // 19 - capturing_settings::led_power
-    args_list.push(
-        settings["capturing_settings"]["led_power"]["value"]
-            .as_i64()
-            .unwrap()
-            .to_string(),
-    );
-
-    // 20 - processing_settings::max_inaccuracy
-    args_list.push(
-        settings["processing_settings"]["max_inaccuracy"]["value"]
-            .as_f64()
-            .unwrap()
-            .to_string(),
-    );
-
-    // 21 - processing_settings::surface_smoothness
-    args_list.push(
-        settings["processing_settings"]["surface_smoothness"]["value"]
+        settings["localization_settings"]["local_search_radius"]["value"]
             .as_str()
             .unwrap()
             .to_string(),
     );
 
-    // 22 - processing_settings::normals_estimation_radius
+    // 15 - feature fit consideration level
     args_list.push(
-        settings["processing_settings"]["normals_estimation_radius"]["value"]
-            .as_i64()
+        settings["localization_settings"]["feature_fit_consideration_level"]["value"]
+            .as_u64()
             .unwrap()
             .to_string(),
     );
 
-    // 23 - processing_settings::interreflections_filter
-    args_list.push(bool_to_arg(
-        settings["processing_settings"]["interreflections_filter"]["value"]
-            .as_bool()
-            .unwrap(),
-    ));
-
-    // 24 - experimental_settings::ambient_light_suppression_compatibility_mode
-    args_list.push(bool_to_arg(
-        settings["experimental_settings"]["ambient_light_suppression_compatibility_mode"]["value"]
-            .as_bool()
-            .unwrap(),
-    ));
-
-    // 25 - experimental_settings::pattern_decomposition_reach
+    // 16 - global maximal feature fit overflow
     args_list.push(
-        settings["experimental_settings"]["pattern_decomposition_reach"]["value"]
+        settings["localization_settings"]["global_maximal_feature_fit_overflow"]["value"]
+            .as_u64()
+            .unwrap()
+            .to_string(),
+    );
+
+    // 17 - fine alignment iterations
+    args_list.push(
+        settings["localization_settings"]["fine_alignment_iterations"]["value"]
+            .as_u64()
+            .unwrap()
+            .to_string(),
+    );
+
+    // 18 - fine alignment point set
+    args_list.push(
+        settings["localization_settings"]["fine_alignment_point_set"]["value"]
             .as_str()
             .unwrap()
             .to_string(),
     );
 
-    // 26 - experimental_settings::signal_contrast_threshold
+    // 19 - fine alignment point set sampling
     args_list.push(
-        settings["experimental_settings"]["signal_contrast_threshold"]["value"]
-            .as_f64()
+        settings["localization_settings"]["fine_alignment_point_set_sampling"]["value"]
+            .as_str()
             .unwrap()
             .to_string(),
     );
 
-    // 27 - experimental_settings::use_extended_logging
-    args_list.push(bool_to_arg(
-        settings["experimental_settings"]["use_extended_logging"]["value"]
-            .as_bool()
-            .unwrap(),
-    ));
+    // 20 - projection tolerance
+    args_list.push(
+        settings["localization_settings"]["projection_tolerance"]["value"]
+            .as_u64()
+            .unwrap()
+            .to_string(),
+    );
+
+    // 21 - projection hidden part tolerance
+    args_list.push(
+        settings["localization_settings"]["projection_hidden_part_tolerance"]["value"]
+            .as_u64()
+            .unwrap()
+            .to_string(),
+    );
+
+    // 22 - overlap
+    args_list.push(
+        settings["localization_settings"]["overlap"]["value"]
+            .as_u64()
+            .unwrap()
+            .to_string(),
+    );
+
+    // 23 - praw location
+    args_list.push(request.praw_dir.clone());
+
+    // 24 - ply location
+    args_list.push(request.ply_dir.clone());
+
+    // 25 - plcf location
+    args_list.push(request.plcf_dir.clone());
 
     args_list
 }
@@ -366,129 +424,11 @@ fn capitalize_first(s: &str) -> String {
     }
 }
 
-// # 0 - executable name
-// args_list.append(
-//     os.path.join(
-//         self.pholoc_driver_dir, "executables", capcom, capcom + "_Release"
-//     )
-// )
-// # 1 - scanner hardware identification
-// args_list.append(self.scanner_parameters["hardware_identification"])
-// # 2 - scene name
-// args_list.append(request.scene_name)
-// # 3 - target name
-// args_list.append(request.target_name)
-// # 4 - source format
-// args_list.append(request.source_format)
-// # 5 - stop at timeout criterion
-// args_list.append(str(request.stop_at_timeout))
-// # 6 - stop at number criterion
-// args_list.append(str(request.stop_at_number))
-// # 7 - scene noise reduction
-// args_list.append(
-//     self.bool_to_arg(
-//         settings["localization_settings"]["scene_noise_reduction"]["value"]
-//     )
-// )
-// # 8 - smart memory
-// args_list.append(
-//     self.bool_to_arg(settings["localization_settings"]["smart_memory"]["value"])
-// )
-// # 9 - scene clustering level
-// args_list.append(
-//     settings["localization_settings"]["scene_clustering_level"]["value"]
-// )
-// # 10 - scene minimal cluster size
-// args_list.append(
-//     str(
-//         settings["localization_settings"]["scene_minimal_cluster_size"]["value"]
-//     )
-// )
-// # 11 - scene maximal cluster size
-// args_list.append(
-//     str(
-//         settings["localization_settings"]["scene_maximal_cluster_size"]["value"]
-//     )
-// )
-// # 12 - matching algorithm
-// args_list.append(
-//     settings["localization_settings"]["matching_algorithm"]["value"]
-// )
-// # 13 - model keypoints sampling
-// args_list.append(
-//     settings["localization_settings"]["model_keypoints_sampling"]["value"]
-// )
-// # 14 - local search radius
-// args_list.append(
-//     settings["localization_settings"]["local_search_radius"]["value"]
-// )
-// # 15 - feature fit consideration level
-// args_list.append(
-//     str(
-//         settings["localization_settings"]["feature_fit_consideration_level"][
-//             "value"
-//         ]
-//     )
-// )
-// # 16 - global maximal feature fit overflow
-// args_list.append(
-//     str(
-//         settings["localization_settings"][
-//             "global_maximal_feature_fit_overflow"
-//         ]["value"]
-//     )
-// )
-// # 17 - fine alignment iterations
-// args_list.append(
-//     str(settings["localization_settings"]["fine_alignment_iterations"]["value"])
-// )
-// # 18 - fine alignment point set
-// args_list.append(
-//     settings["localization_settings"]["fine_alignment_point_set"]["value"]
-// )
-// # 19 - fine alignment point set sampling
-// args_list.append(
-//     settings["localization_settings"]["fine_alignment_point_set_sampling"][
-//         "value"
-//     ]
-// )
-// # 20 - projection tolerance
-// args_list.append(
-//     str(settings["localization_settings"]["projection_tolerance"]["value"])
-// )
-// # 21 - projection hidden part tolerance
-// args_list.append(
-//     str(
-//         settings["localization_settings"]["projection_hidden_part_tolerance"][
-//             "value"
-//         ]
-//     )
-// )
-// # 22 - overlap
-// args_list.append(str(settings["localization_settings"]["overlap"]["value"]))
-// # 23 - praws location
-// args_list.append(self.praws_dir)
-// # 24 - plys location
-// args_list.append(self.plys_dir)
-// # 25 - plcfs location
-// args_list.append(self.plcfs_dir)
-
 fn bool_to_arg(value: bool) -> String {
     if value {
         "1".to_string()
     } else {
         "0".to_string()
-    }
-}
-
-fn resolution_to_arg(value: &Value) -> String {
-    // "0" is 2064x1544 and "1" is 1032x772
-    if value["width"] == 2064 && value["height"] == 1544 {
-        "0".to_string()
-    } else if value["width"] == 1032 && value["height"] == 772 {
-        "1".to_string()
-    } else {
-        panic!("Unsupported Photoneo resolution")
     }
 }
 

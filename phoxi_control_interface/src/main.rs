@@ -354,6 +354,15 @@ fn prepare_arguments(request: &Scan::Request) -> Vec<String> {
             .unwrap(),
     ));
 
+    // 28 - Where to save the praw files
+    args_list.push(request.praw_dir.clone());
+
+    // 29 - Where to save the ply files
+    args_list.push(request.ply_dir.clone());
+
+    // 30 - Where to save the tif files
+    args_list.push(request.tif_dir.clone());
+
     args_list
 }
 
