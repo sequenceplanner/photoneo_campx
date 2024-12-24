@@ -94,4 +94,4 @@ Select a number od instances you would like to test for and start the localizati
 
 ![alt text](instruction_images/preparation_21.png)
 #### Step 22
-Tweak the setting so see if the confidences can be increased and save the settings. This can be done per prepared item and later used as a parameter.
+Tweak the setting so see if the confidences can be increased and save the settings. This can be done per prepared item and later used as a parameter. TODO: Expland this and show how to.
