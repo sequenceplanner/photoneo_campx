@@ -8,23 +8,21 @@ services:
       context: .
       dockerfile: Dockerfile
     image: photoneo/phoxicontrol:ubuntu16
-    # devices:
-    #   - /dev/dri:/dev/dri
-    ports:
-      - "8080:8080"
-    # volumes:
-      # - /tmp/.X11-unix:/tmp/.X11-unix
-      # - /usr/lib/x86_64-linux-gnu/dri:/usr/lib/x86_64-linux-gnu/dri:ro
-      # - /var/run/dbus:/var/run/dbus
-      # - /dev/shm:/dev/shm
+    devices:
+      - /dev/dri:/dev/dri
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /usr/lib/x86_64-linux-gnu/dri:/usr/lib/x86_64-linux-gnu/dri:ro
+      - /var/run/dbus:/var/run/dbus
+      - /dev/shm:/dev/shm
     privileged: true
-    # environment:
-      # - DISPLAY=${DISPLAY}
-      # - LIBGL_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri
-      # - DOCKER=1
-      # - QT_X11_NO_MITSHM=1
-      # - SHELL=${SHELL}
-    # stop_signal: SIGKILL
+    environment:
+      - DISPLAY=${DISPLAY}
+      - LIBGL_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri
+      - DOCKER=1
+      - QT_X11_NO_MITSHM=1
+      - SHELL=${SHELL}
+    stop_signal: SIGKILL
     security_opt:
       - apparmor=unconfined
     logging:

@@ -1,0 +1,13 @@
+---
+
+version: "3.6"
+
+services:
+  guacamole:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: guacamole:ubuntu16
+    ports:
+      - "8080:8080"
+    privileged: true
