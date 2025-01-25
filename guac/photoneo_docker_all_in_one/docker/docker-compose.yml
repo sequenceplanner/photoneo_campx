@@ -14,5 +14,3 @@ services:
       - "6901:6901"   # NoVNC
     privileged: true
     shm_size: "2g"
-    volumes:
-      - /home/endre/docker_mount/:/root/Desktop

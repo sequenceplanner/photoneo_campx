@@ -8,8 +8,7 @@ echo "Starting avahi-daemon..."
 service avahi-daemon start
 
 echo "Starting Xvfb on :1..."
-# Xvfb :1 -screen 0 1280x800x24 -ac &
-Xvfb :1 -screen 0 1680x1050x24 -ac &
+Xvfb :1 -screen 0 1280x800x24 -ac &
 sleep 2
 export DISPLAY=:1
 
