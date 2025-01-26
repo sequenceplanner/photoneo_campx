@@ -1,78 +1,20 @@
 ---
 
-version: "3.6"
+version: "3.8"
 
 services:
-  phoxicontrol:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: photoneo/phoxicontrol:ubuntu16
-    # devices:
-    #   - /dev/dri:/dev/dri
+  all-in-one:
+    build: .
+    container_name: photoneo-all-in-one
     ports:
-      - "8080:8080"
-    # volumes:
-      # - /tmp/.X11-unix:/tmp/.X11-unix
-      # - /usr/lib/x86_64-linux-gnu/dri:/usr/lib/x86_64-linux-gnu/dri:ro
-      # - /var/run/dbus:/var/run/dbus
-      # - /dev/shm:/dev/shm
+      - "8080:8080"   # Tomcat / Guacamole web
+      - "4822:4822"   # guacd
+      - "5432:5432"   # PostgreSQL
+      - "5901:5901"   # vnc
+      - "6901:6901"   # NoVNC
     privileged: true
-    # environment:
-      # - DISPLAY=${DISPLAY}
-      # - LIBGL_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri
-      # - DOCKER=1
-      # - QT_X11_NO_MITSHM=1
-      # - SHELL=${SHELL}
-    # stop_signal: SIGKILL
-    security_opt:
-      - apparmor=unconfined
-    logging:
-      driver: journald
-      options:
-        tag: '{{.ImageID}}/{{.Name}}/{{.ID}}'
-
-# version: "3.6"
-# services:
-#   phoxicontrol:
-#     build:
-#       context: .
-#       dockerfile: Dockerfile
-#     image: photoneo/phoxicontrol:ubuntu16
-
-#     # Pass through the GPU device
-#     devices:
-#       - /dev/dri:/dev/dri
-
-#     # Mount host libraries that you need for hardware-accelerated OpenGL
-#     # NOTE: the exact symlink/file names can differ on your system!
-#     volumes:
-#       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-#       - /var/run/dbus:/var/run/dbus
-#       - /dev/shm:/dev/shm
-#       # The DRI drivers folder:
-#       - /usr/lib/x86_64-linux-gnu/dri:/usr/lib/x86_64-linux-gnu/dri:ro
-#       # The GL/GLX libraries:
-#       - /usr/lib/x86_64-linux-gnu/libGL.so.1:/usr/lib/x86_64-linux-gnu/libGL.so.1:ro
-#       - /usr/lib/x86_64-linux-gnu/libGLX.so.0:/usr/lib/x86_64-linux-gnu/libGLX.so.0:ro
-#       - /usr/lib/x86_64-linux-gnu/libGLdispatch.so.0:/usr/lib/x86_64-linux-gnu/libGLdispatch.so.0:ro
-#       # Potentially also some X libraries if needed:
-#       - /usr/lib/x86_64-linux-gnu/libX11.so.6:/usr/lib/x86_64-linux-gnu/libX11.so.6:ro
-#       - /usr/lib/x86_64-linux-gnu/libXext.so.6:/usr/lib/x86_64-linux-gnu/libXext.so.6:ro
-
-#     # Grant higher privileges (often needed for direct hardware access)
-#     privileged: true
-#     security_opt:
-#       - apparmor=unconfined
-
-#     # Environment to enable X forwarding from your host
-#     environment:
-#       - DISPLAY=${DISPLAY}
-#       - QT_X11_NO_MITSHM=1
-#       - LIBGL_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri
-
-#     # Logging or other docker-compose options
-#     logging:
-#       driver: journald
-#       options:
-#         tag: '{{.ImageID}}/{{.Name}}/{{.ID}}'
+    shm_size: "2g"
+    volumes:
+      - /home/endre/docker_mount/:/root/Desktop
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

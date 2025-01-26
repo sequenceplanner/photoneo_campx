@@ -1,268 +1,215 @@
-# Use Ubuntu 16.04 as the base image
-FROM ubuntu:16.04 as builder
+FROM ubuntu:16.04
 
-ARG GUAC_VER="0.9.14"
-ARG BUILD_DIR=/tmp/guacd-docker-BUILD
-ARG PKG_NAME="guacd"
-ARG BUILD_DEPENDENCIES="          \
-	autoconf                      \
-	automake                      \
-	gcc-6                         \
-	libcairo2-dev                 \
-	libfreerdp-dev                \
-	libjpeg-turbo8-dev            \
-	libossp-uuid-dev              \
-	libpng-dev                    \
-	libpulse-dev                  \
-	libssl-dev                    \
-	libtool                       \
-	libvorbis-dev                 \
-	libwebp-dev                   \
-	make"
+# Noninteractive install
+ENV DEBIAN_FRONTEND=noninteractive
 
-COPY /buildroot /
+# Update OS and install prerequisites
+RUN apt-get update \
+    && apt-get dist-upgrade -y \
+    && apt-get install -y software-properties-common
 
-RUN \
- echo "**** install build deps ****" && \
- apt-get update && \
- apt-get install -qy --no-install-recommends \
-	checkinstall \
-	curl \
-	$BUILD_DEPENDENCIES && \
- echo "**** prep build ****" && \
- mkdir ${BUILD_DIR} && \
- ln -sf /usr/bin/gcc-6 /usr/bin/gcc && \
- curl -o /tmp/guacd.tar.gz -s \
-	-L "https://sourceforge.net/projects/guacamole/files/current/source/guacamole-server-${GUAC_VER}.tar.gz" && \
- tar -xf /tmp/guacd.tar.gz --strip=1 -C ${BUILD_DIR} && \
- echo "**** build guacd ****" && \
- cd ${BUILD_DIR} && \
- ./configure --with-init-dir=/etc/init.d --prefix=/usr && \
- make -j 2 CC=gcc-6 && \
- mkdir ${BUILD_DIR}/doc-pak && \
- /bin/list-dependencies.sh \
-	"${BUILD_DIR}src/guacd/.libs/guacd" \
-	$(find ${BUILD_DIR} | grep "so$") \
-	> ${BUILD_DIR}/doc-pak/DEPENDENCIES && \
- PREFIX=/usr checkinstall \
-	-y \
-	-D \
-	--nodoc \
-	--pkgname ${PKG_NAME} \
-	--pkgversion ${GUAC_VER} \
-	--pakdir /tmp \
-	--exclude "/usr/share/man","/usr/include","/etc" && \
- mv /tmp/${PKG_NAME}_${GUAC_VER}-*.deb /tmp/${PKG_NAME}_${GUAC_VER}.deb
+# Install packages
+RUN add-apt-repository ppa:ts.sch.gr/ppa -y \
+    && apt-get update \
+    && echo debconf shared/accepted-oracle-license-v1-1 select true | debconf-set-selections \
+    && echo debconf shared/accepted-oracle-license-v1-1 seen true | debconf-set-selections \
+    && apt-get install -y \
+       oracle-java8-installer \
+       oracle-java8-set-default \
+       tomcat8 tomcat8-admin tomcat8-common tomcat8-docs tomcat8-user \
+       libcairo2-dev libjpeg-turbo8-dev libpng12-dev libossp-uuid-dev \
+       libfreerdp-dev libpango1.0-dev libssh2-1-dev libtelnet-dev libvncserver-dev \
+       libpulse-dev libssl-dev libvorbis-dev libwebp-dev build-essential autoconf libtool cmake \
+       maven pwgen git \
+       postgresql-9.5 postgresql-server-dev-9.5 postgresql-common \
+       ghostscript wget haveged \
+       nginx
 
+# Create Guacamole directories & files
+RUN mkdir -p /etc/guacamole \
+    && mkdir -p /etc/guacamole/lib \
+    && mkdir -p /etc/guacamole/extensions \
+    && touch /etc/guacamole/user-mapping.xml
 
-FROM ghcr.io/linuxserver/baseimage-gui
+# Configure GUACAMOLE_HOME for Tomcat
+RUN echo "" >> /etc/default/tomcat8 \
+    && echo "# GUACAMOLE ENV VARIABLE" >> /etc/default/tomcat8 \
+    && echo "GUACAMOLE_HOME=/etc/guacamole" >> /etc/default/tomcat8
 
-# set version label
-ARG BUILD_DATE
-ARG VERSION
-LABEL build_version="Linuxserver.io version:- ${VERSION} Build-date:- ${BUILD_DATE}"
-LABEL maintainer="HurricaneHrndz"
+# Build and install Guacamole server
+WORKDIR /opt
+RUN git clone https://github.com/apache/incubator-guacamole-server.git \
+    && cd incubator-guacamole-server \
+    && autoreconf -fi \
+    && ./configure --with-init-dir=/etc/init.d \
+    && make \
+    && make install \
+    && ldconfig
 
+# Remove the old Maven if present, and install prerequisites
+RUN apt-get remove -y maven && \
+    apt-get update && \
+    apt-get install -y wget curl
 
-ARG TOMCAT_VER="tomcat8"
-ARG GUAC_VER="0.9.14"
-ARG PKG_NAME="guacd"
-ARG GUACD_DEPENDENCIES="          \
-	ca-certificates               \
-	ghostscript                   \
-	libfreerdp-plugins-standard   \
-	fonts-liberation              \
-	fonts-dejavu                  \
-	xfonts-terminus"
+# Need a very specific Maven version, install Maven 3.6.3 manually
+ENV MAVEN_VERSION=3.6.3
+RUN wget --no-verbose -O /tmp/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
+      https://archive.apache.org/dist/maven/maven-3/3.6.3/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
+    && tar -xzf /tmp/apache-maven-${MAVEN_VERSION}-bin.tar.gz -C /opt \
+    && ln -s /opt/apache-maven-${MAVEN_VERSION} /opt/maven \
+    && ln -s /opt/maven/bin/mvn /usr/bin/mvn
 
-ENV TOMCAT_VER=${TOMCAT_VER}
+ENV MAVEN_HOME=/opt/maven
+ENV PATH=$MAVEN_HOME/bin:$PATH
 
-# Copy deb into this stage
-COPY --from=builder /tmp/${PKG_NAME}_${GUAC_VER}.deb /tmp/${PKG_NAME}_${GUAC_VER}.deb
+# Build and install Guacamole client (web app)
+WORKDIR /opt
+RUN git clone --branch 0.9.12-incubating https://github.com/apache/incubator-guacamole-client.git \
+    && cd incubator-guacamole-client \
+    && mvn package \
+    && cp ./guacamole/target/guacamole-0.9.12-incubating.war /var/lib/tomcat8/webapps/guacamole.war \
+    && cp ./extensions/guacamole-auth-jdbc/modules/guacamole-auth-jdbc-postgresql/target/guacamole-auth-jdbc-postgresql-0.9.12-incubating.jar \
+          /etc/guacamole/extensions/
 
-RUN \
- echo "**** install guacd ****" && \
- dpkg --path-include=/usr/share/doc/${PKG_NAME}/* \
-	-i /tmp/${PKG_NAME}_${GUAC_VER}.deb && \
- apt-get update && \
- apt-get install -qy --no-install-recommends \
-	${GUACD_DEPENDENCIES} && \
- apt-get install -qy --no-install-recommends \
-	$(cat /usr/share/doc/${PKG_NAME}/DEPENDENCIES) && \
- echo "**** install guacamole ****" && \
- mkdir -p \
-	/etc/guacamole/extensions \
-	/etc/guacamole/lib && \
- apt-get install -qy --no-install-recommends \
-	${TOMCAT_VER} \
-	${TOMCAT_VER}-common \
-	${TOMCAT_VER}-user && \
- curl -so /etc/guacamole/guacamole.war \
-	-L https://sourceforge.net/projects/guacamole/files/current/binary/guacamole-${GUAC_VER}.war && \
- echo "GUACAMOLE_HOME=/etc/guacamole" >> /etc/default/${TOMCAT_VER} && \
- ln -s /etc/guacamole /usr/share/${TOMCAT_VER}/.guacamole && \
- curl -so /tmp/guacamole-noauth.tar.gz \
-	-L http://archive.apache.org/dist/guacamole/${GUAC_VER}/binary/guacamole-auth-noauth-${GUAC_VER}.tar.gz && \
- mkdir -p /tmp/noauth && \
- tar -xf /tmp/guacamole-noauth.tar.gz --strip=1 -C /tmp/noauth && \
- mv /tmp/noauth/guacamole-auth-noauth-${GUAC_VER}.jar /defaults/ && \
- echo "**** clean up ****" && \
- rm -rf \
-	/var/lib/${TOMCAT_VER}/webapps/ROOT \
-	/tmp/* \
-	/var/lib/apt/lists/* \
-	/var/tmp/*
+# Install PostgreSQL JDBC driver
+WORKDIR /usr/local/src
+RUN wget -c https://jdbc.postgresql.org/download/postgresql-42.0.0.jar \
+    && cp postgresql-42.0.0.jar /etc/guacamole/lib/
 
-# add local files
-COPY /root /
+# Link FreeRDP libraries (as in your script)
+RUN ln -s /usr/local/lib/freerdp/* /usr/lib/x86_64-linux-gnu/freerdp/. || true
 
-# ports and volumes
-EXPOSE 8080
-VOLUME /config
+# Generate a random password example
+RUN pwgen -n 14
 
-# Switch to the root user
-USER root
+# Configure Guacamole properties
+RUN echo "#api-session-timeout: 60" >> /etc/guacamole/guacamole.properties \
+    && echo "available-languages: en" >> /etc/guacamole/guacamole.properties \
+    && echo "guacd-hostname: localhost" >> /etc/guacamole/guacamole.properties \
+    && echo "guacd-port: 4822" >> /etc/guacamole/guacamole.properties \
+    && echo "#guacd-ssl: true" >> /etc/guacamole/guacamole.properties \
+    && echo "lib-directory: /var/lib/tomcat8/webapps/guacamole/WEB-INF/classes" >> /etc/guacamole/guacamole.properties \
+    && echo "" >> /etc/guacamole/guacamole.properties \
+    && echo "postgresql-hostname: localhost" >> /etc/guacamole/guacamole.properties \
+    && echo "postgresql-port: 5432" >> /etc/guacamole/guacamole.properties \
+    && echo "postgresql-database: guacamole_db" >> /etc/guacamole/guacamole.properties \
+    && echo "postgresql-username: guacamole_user" >> /etc/guacamole/guacamole.properties \
+    && echo "postgresql-password: PASSWORD" >> /etc/guacamole/guacamole.properties \
+    && echo "postgresql-user-password-min-length: 8" >> /etc/guacamole/guacamole.properties \
+    && echo "postgresql-user-password-require-multiple-case: true" >> /etc/guacamole/guacamole.properties \
+    && echo "postgresql-user-password-require-symbol: true" >> /etc/guacamole/guacamole.properties \
+    && echo "postgresql-user-password-require-digit: true" >> /etc/guacamole/guacamole.properties \
+    && echo "postgresql-user-password-prohibit-username: true" >> /etc/guacamole/guacamole.properties
 
+# Link Guacamole home to Tomcat's .guacamole path
+RUN rm -rf /usr/share/tomcat8/.guacamole \
+    && ln -s /etc/guacamole /usr/share/tomcat8/.guacamole
+
+RUN service postgresql start \
+ && su postgres -c "createdb guacamole_db" \
+ && cd /opt/incubator-guacamole-client/extensions/guacamole-auth-jdbc/modules/guacamole-auth-jdbc-postgresql/ \
+ && cat schema/*.sql | su postgres -c "psql guacamole_db" \
+ && su postgres -c "psql -c \"CREATE USER guacamole_user WITH PASSWORD 'PASSWORD';\"" \
+ && su postgres -c "psql -c \"GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO guacamole_user;\"" \
+ && su postgres -c "psql -c \"GRANT SELECT,USAGE ON ALL SEQUENCES IN SCHEMA public TO guacamole_user;\""
+
+# Re-run ldconfig
+RUN ldconfig
+
+# Install a self-signed dhparam for Nginx (this can be slow)
+RUN mkdir -p /etc/nginx/ssl && cd /etc/nginx/ssl && openssl dhparam -out dhparams.pem 2048
+
+# Configure environment variable for photoneo
 ENV PHOXI_CONTROL_PATH="/opt/PhoXiControl-1.2.35"
+ENV PHO_LOCALIZATION_PATH="/opt/PhotoneoSDK/Localization"
 
-# Remove Ubuntu 16.04's old Mesa/GL libraries to avoid conflicts
-RUN set -eux \
-    && apt-get update -y \
-    && apt-get remove --purge -y \
-         libgl1-mesa-dri \
-         libgl1-mesa-glx \
-         libglapi-mesa \
-    && apt-get autoremove -y \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Install required packages for downloading photoneo (including wget)
+RUN apt-get update
+RUN apt-get install -y wget ca-certificates
+RUN rm -rf /var/lib/apt/lists/*
 
-# Update and install required packages
-RUN set -eux \
-    && apt-get update -y \
-    && apt-get install -y -q \
-       software-properties-common \
-       avahi-utils \
-       libqt5core5a \
-       libqt5dbus5 \
-       libqt5gui5 \
-       libgtk2.0-0 \
-       libssl1.0.0 \
-       libgomp1 \
-       libpcre16-3 \
-       libflann-dev \
-       libssh2-1-dev \
-       libpng16-16 \
-       libglfw3-dev \
-       xcb \
-    && apt-add-repository universe \
-    && apt-get update -y \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Download the PhoXiControl
+RUN wget \
+     --no-verbose \
+     --output-document=/tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.tar.gz \
+     "https://www.photoneo.com/files/dw/dw/pxc/1.2.35/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.tar.gz"
 
-# Copy installers into the container
-COPY context/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run /tmp/
-COPY context/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run /tmp/
+# Extract the tar.gz archive into /tmp
+RUN tar --extract \
+     --file=/tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.tar.gz \
+     --directory=/tmp
 
 # Ensure the installer files have execution permissions
-RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run \
-    && chmod +x /tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run
+RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run
 
-# Install PhoXiControl
-RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run --accept ${PHOXI_CONTROL_PATH} \
-    && rm /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run
+# Install PhoXiControl to the specified directory
+RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run \
+     --accept "${PHOXI_CONTROL_PATH}"
 
-RUN set -eux \
-    && mkdir /root/.PhotoneoPhoXiControl
+# Clean up afterwards
+RUN rm -rf /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run
 
-# Expose ports 
-# Guacamole web browser viewer
-EXPOSE 8080
-# VNC viewer
-EXPOSE 3389
+# Download PhoLocalization
+RUN wget \
+     --no-verbose \
+     --output-document=/tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run.tar \
+     "https://www.photoneo.com/files/dw/dw/localization/1.3.4/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run.tar"
 
-CMD ["PhoXiControl"]
+# Extract the tar.gz archive into /tmp
+RUN tar --extract \
+     --file=/tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run.tar \
+     --directory=/tmp
 
+# Ensure the installer files have execution permissions
+RUN chmod +x /tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run
 
+# Install PhoXiControl to the specified directory
+RUN /tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run \
+     --accept "${PHO_LOCALIZATION_PATH}"
 
+# Clean up afterwards
+RUN rm -rf /tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run
 
+# More X related packages to run GUIs:
+RUN apt-get update && apt-get install -y \
+    wget \
+    ca-certificates \
+    xfce4 \
+    x11vnc \
+    xvfb \
+    novnc \
+    libxrandr2 \
+    libxrender1 \
+    libxcursor1 \
+    libxi6 \
+    libxtst6 \
+    libxxf86vm1
 
+# PhoXiControl apparently uses mDNS or DNS-SD for device discovery, 
+# requiring an Avahi client and a running Avahi daemon. If the daemon
+# isn’t present, PhoXiControl throws std::runtime_error:
+RUN apt-get update && apt-get install -y \
+    avahi-daemon \
+    dbus \
+    libavahi-client3
 
-# FROM ubuntu:16.04
+# Expose ports:
+# 8080 = Tomcat / Guacamole web
+# 4822 = guacd
+# 5432 = PostgreSQL
+# 80   = Nginx (if you choose to run it)
+# 5901 = vnc
+# 6901 = noVNC
 
-# USER root
+EXPOSE 8080 4822 5432
+EXPOSE 5901 6901
 
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+# TODO: this is a bug SCAN-3548
 # RUN set -eux \
-#     && apt-get update -y \
-#     && apt-get install -y -q software-properties-common && apt-add-repository universe \
-#     && apt-get update -y \
-#     && apt install -y avahi-utils libqt5core5a libqt5dbus5 libqt5gui5 libgtk2.0-0 libssl1.0.0 libgomp1 libpcre16-3 libflann-dev libssh2-1-dev libpng16-16 libglfw3-dev xcb
+#     && mkdir /root/.PhotoneoPhoXiControl
 
-# # COPY installer/phoxi.run /tmp/phoxi.run
-# # COPY system_files/PhoXiControl /usr/local/bin/PhoXiControl
-
-# # ENV PHOXI_CONTROL_PATH="/opt/Photoneo/PhoXiControl"
-
-# # RUN set -eux \
-# #     && cd /tmp \
-# #     && chmod a+x phoxi.run \
-# #     && ./phoxi.run --accept ${PHOXI_CONTROL_PATH} \
-# #     && rm -rf phoxi.run
-
-# # # TODO: this is a bug SCAN-3548
-# # RUN set -eux \
-# #     && mkdir /root/.PhotoneoPhoXiControl
-
-# # CMD ["/usr/local/bin/PhoXiControl"]
-
-# # chmod +x PhotoneoPhoXiControlInstaller-<version>-Ubuntu[22 20 18]-STABLE.run
-# # $ sudo ./PhotoneoPhoXiControlInstaller-<version>-Ubuntu[22 20 18]-STABLE.run
-# # $ sudo ./PhotoneoPhoXiControlInstaller-Ubuntu-<version>.run --accept
-# # /opt/Photoneo/PhoXiControl-<version>
-
-# # Copy your installer into the image
-# COPY PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run
-# COPY PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run /tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run
-
-# # Ensure the installer has execution permissions
-# RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run
-# RUN chmod +x /tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run
-
-# # Run the PhoXiControl Installer
-# RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run --accept ${PHOXI_CONTROL_PATH}
-# RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run
-
-# # Open a bash shell by default
-# CMD ["/bin/bash"]
-
-# FROM ubuntu:16.04
-
-# # Avoid interactive prompts during builds
-# ENV DEBIAN_FRONTEND=noninteractive
-
-# # Install common dependencies
-# RUN apt-get update && \
-#     apt-get install -y --no-install-recommends \
-#       curl \
-#       ca-certificates && \
-#     rm -rf /var/lib/apt/lists/*
-
-# # --- Phoxi Contol Installation ---
-# # Copy the first .run file into the image
-# COPY PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run
-
-# # Make it executable and run the installer
-# RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run && \
-#     yes | /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run && \
-#     rm /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run
-
-# # --- Localization SDK Installation ---
-# # Copy the second .run file into the image
-# COPY PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run /tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run
-
-# # Make it executable and run the installer
-# RUN chmod +x /tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run && \
-#     yes | /tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run --silent && \
-#     rm /tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.run
-
-# # Default command when running the container
-# CMD ["/bin/bash"]
+# Final command: run our script that starts all services in one container
+CMD ["/start.sh"]
