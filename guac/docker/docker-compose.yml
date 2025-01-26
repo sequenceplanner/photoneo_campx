@@ -16,3 +16,5 @@ services:
     shm_size: "2g"
     volumes:
       - /home/endre/docker_mount/:/root/Desktop
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
