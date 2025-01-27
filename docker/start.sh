@@ -27,12 +27,15 @@ startxfce4 &
 websockify --web /usr/share/novnc 6901 localhost:5901 &
 sleep 2
 
-# Launch PhoXiControl (GUI) inside the X environment
-# echo "Starting PhoXiControl..."
-# DISPLAY=:1 PhoXiControl &
+echo "Starting Flask REST API server..."
+# Activate Python virtual environment and run Flask in the background
+source /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables/api_server/venv/bin/activate
+python3 /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables/api_server/app.py &
 
-# echo "Starting PhoLocConfig..."
-# DISPLAY=:1 PhoLocConfig &
+sleep 2
 
 echo "Access noVNC at http://<host>:6901/"
+echo "Flask REST API server is running on http://<host>:5000/"
+
+# Keep the container running
 tail -f /dev/null

@@ -19,7 +19,7 @@ RUN add-apt-repository ppa:ts.sch.gr/ppa -y \
        tomcat8 tomcat8-admin tomcat8-common tomcat8-docs tomcat8-user \
        libcairo2-dev libjpeg-turbo8-dev libpng12-dev libossp-uuid-dev \
        libfreerdp-dev libpango1.0-dev libssh2-1-dev libtelnet-dev libvncserver-dev \
-       libpulse-dev libssl-dev libvorbis-dev libwebp-dev build-essential autoconf libtool cmake \
+       libpulse-dev libssl-dev libvorbis-dev libwebp-dev build-essential autoconf libtool \
        maven pwgen git \
        postgresql-9.5 postgresql-server-dev-9.5 postgresql-common \
        ghostscript wget haveged \
@@ -49,7 +49,7 @@ RUN git clone https://github.com/apache/incubator-guacamole-server.git \
 # Remove the old Maven if present, and install prerequisites
 RUN apt-get remove -y maven && \
     apt-get update && \
-    apt-get install -y wget curl
+    apt-get install -y curl
 
 # Need a very specific Maven version, install Maven 3.6.3 manually
 ENV MAVEN_VERSION=3.6.3
@@ -120,34 +120,36 @@ RUN ldconfig
 RUN mkdir -p /etc/nginx/ssl && cd /etc/nginx/ssl && openssl dhparam -out dhparams.pem 2048
 
 # Configure environment variable for photoneo
-ENV PHOXI_CONTROL_PATH="/opt/PhoXiControl-1.2.35"
+ENV PHOXI_CONTROL_PATH="/opt/PhoXiControl-1.2.26"
 ENV PHO_LOCALIZATION_PATH="/opt/PhotoneoSDK/Localization"
 
 # Install required packages for downloading photoneo (including wget)
 RUN apt-get update
-RUN apt-get install -y wget ca-certificates
+RUN apt-get install -y ca-certificates
 RUN rm -rf /var/lib/apt/lists/*
 
 # Download the PhoXiControl
 RUN wget \
      --no-verbose \
-     --output-document=/tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.tar.gz \
-     "https://www.photoneo.com/files/dw/dw/pxc/1.2.35/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.tar.gz"
+     --output-document=/tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu16-STABLE.tar.gz \
+     "https://www.photoneo.com/files/dw/dw/pxc/1.2.26/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu16-STABLE.tar.gz"
 
 # Extract the tar.gz archive into /tmp
 RUN tar --extract \
-     --file=/tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.tar.gz \
+     --file=/tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu16-STABLE.tar.gz \
      --directory=/tmp
 
 # Ensure the installer files have execution permissions
-RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run
+RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run
+# RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu16-STABLE.run
 
 # Install PhoXiControl to the specified directory
-RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run \
+# RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu16-STABLE.run \
+RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run \
      --accept "${PHOXI_CONTROL_PATH}"
 
 # Clean up afterwards
-RUN rm -rf /tmp/PhotoneoPhoXiControlInstaller-1.2.35-Ubuntu16-STABLE.run
+RUN rm -rf /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run
 
 # Download PhoLocalization
 RUN wget \
@@ -172,7 +174,6 @@ RUN rm -rf /tmp/PhotoneoLocalizationSDKInstaller-1.3.4+b9c79c4-Linux-gcc5.5.0.ru
 
 # More X related packages to run GUIs:
 RUN apt-get update && apt-get install -y \
-    wget \
     ca-certificates \
     xfce4 \
     x11vnc \
@@ -204,12 +205,178 @@ RUN apt-get update && apt-get install -y \
 EXPOSE 8080 4822 5432
 EXPOSE 5901 6901
 
+# Need a newer version of cmake to build the Photoneo code
+# Install cmake dependencies and clean up
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        apt-transport-https \
+        ca-certificates \
+        gnupg \
+        software-properties-common && \
+    rm -rf /var/lib/apt/lists/*
+
+# Import Kitware's signing key and add their repository, then install CMake
+RUN wget -qO - https://apt.kitware.com/keys/kitware-archive-latest.asc | apt-key add - && \
+    apt-add-repository 'deb https://apt.kitware.com/ubuntu/ xenial main' && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends cmake && \
+    rm -rf /var/lib/apt/lists/*
+
+# Get and build the C++ programs
+# Create a folder named photoneo_programs on the Desktop (in /root/Desktop)
+# RUN mkdir -p /root/Desktop/photoneo_programs
+
+# Switch working directory to that new folder
+# WORKDIR /root/Desktop/photoneo_programs
+
+# Clone photoneo_campx repo
+# RUN git clone https://github.com/sequenceplanner/photoneo_campx
+
+# WORKDIR /root/Desktop/photoneo_programs/photoneo_campx/phoxi_control_interface/cpp_executables/Connect
+
+
+
+
+
+
+# new below
+#######
+
+
+
+
+# Set working directory
+WORKDIR /usr/local/src
+
+# Clone your C++ repository
+RUN git clone https://github.com/sequenceplanner/photoneo_campx.git
+
+# Navigate to the cpp_executables directory
+WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables
+
+# Create a 'dev' directory for build artifacts
+RUN mkdir -p dev
+
+# Build all four C++ programs
+RUN cd dev && \
+    for proj in Connect Capture Freerun Stop; do \
+        echo "Building $proj..." && \
+        mkdir $proj && \
+        cd $proj && \
+        cmake ../../$proj -DCMAKE_BUILD_TYPE=Release && \
+        make -j"$(nproc)" && \
+        cd ..; \
+    done
+
+# (Optional) Verify build artifacts
+RUN ls -al dev/Connect && \
+    ls -al dev/Capture && \
+    ls -al dev/Freerun && \
+    ls -al dev/Stop
+
+# Set up Python environment for Flask
+WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables
+
+# Create a directory for the Flask API server
+RUN mkdir api_server
+
+# Copy the Flask app code into the container
+COPY api_server/ api_server/
+
+# Navigate to the Flask app directory
+WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables/api_server
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv
+
+# Create a Python virtual environment and install dependencies with pip 20.3.4
+RUN python3 -m venv venv && \
+    ./venv/bin/pip install --upgrade "pip==20.3.4" && \
+    ./venv/bin/pip install -r requirements.txt
+
+# Make start.sh executable
+COPY start.sh /usr/local/src/start.sh
+RUN chmod +x /usr/local/src/start.sh
+
+# new above
+#######
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# This worked below
+# # Set the working directory
+# WORKDIR /usr/local/src
+
+# # Clone the repository
+# RUN git clone https://github.com/sequenceplanner/photoneo_campx.git
+
+# # Navigate to the cpp_executables directory
+# WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables
+
+# # Create a 'dev' directory for build artifacts
+# RUN mkdir -p dev
+
+# # Build all four C++ programs
+# RUN cd dev && \
+#     for proj in Connect Capture Freerun Stop; do \
+#         echo "Building $proj..." && \
+#         mkdir $proj && \
+#         cd $proj && \
+#         cmake ../../$proj -DCMAKE_BUILD_TYPE=Release && \
+#         make -j"$(nproc)" && \
+#         cd ..; \
+#     done
+
+# # (Optional) Verify build artifacts
+# RUN ls -al dev/Connect && \
+#     ls -al dev/Capture && \
+#     ls -al dev/Freerun && \
+#     ls -al dev/Stop
+
+
+
+
+
+
+
+
+
+
+
+# Build Capture: This works
+# RUN cd /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables && \
+#     mkdir -p dev && \
+#     cd dev && \
+#     cmake ../Connect . -DCMAKE_BUILD_TYPE=Release && \
+#     make
+#     # make -j"$(nproc)"
+
+# RUN cd photoneo_campx/phoxi_control_interface/cpp_executables/Connect \
+#     && mkdir build \
+#     && cd build \
+#     && cmake .. \
+#     && make
+
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
-
-# TODO: this is a bug SCAN-3548
-# RUN set -eux \
-#     && mkdir /root/.PhotoneoPhoXiControl
 
 # Final command: run our script that starts all services in one container
 CMD ["/start.sh"]
