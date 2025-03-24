@@ -203,7 +203,7 @@ RUN apt-get update && apt-get install -y \
 # 6901 = noVNC
 
 EXPOSE 8080 4822 5432
-EXPOSE 5901 6901
+EXPOSE 5901 6901 5000
 
 # Need a newer version of cmake to build the Photoneo code
 # Install cmake dependencies and clean up
@@ -222,29 +222,6 @@ RUN wget -qO - https://apt.kitware.com/keys/kitware-archive-latest.asc | apt-key
     apt-get install -y --no-install-recommends cmake && \
     rm -rf /var/lib/apt/lists/*
 
-# Get and build the C++ programs
-# Create a folder named photoneo_programs on the Desktop (in /root/Desktop)
-# RUN mkdir -p /root/Desktop/photoneo_programs
-
-# Switch working directory to that new folder
-# WORKDIR /root/Desktop/photoneo_programs
-
-# Clone photoneo_campx repo
-# RUN git clone https://github.com/sequenceplanner/photoneo_campx
-
-# WORKDIR /root/Desktop/photoneo_programs/photoneo_campx/phoxi_control_interface/cpp_executables/Connect
-
-
-
-
-
-
-# new below
-#######
-
-
-
-
 # Set working directory
 WORKDIR /usr/local/src
 
@@ -259,7 +236,7 @@ RUN mkdir -p dev
 
 # Build all four C++ programs
 RUN cd dev && \
-    for proj in Connect Capture Freerun Stop; do \
+    for proj in Connect ConnectIPv4 Capture Freerun Stop; do \
         echo "Building $proj..." && \
         mkdir $proj && \
         cd $proj && \
@@ -270,6 +247,7 @@ RUN cd dev && \
 
 # (Optional) Verify build artifacts
 RUN ls -al dev/Connect && \
+    ls -al dev/ConnectIPv4 && \
     ls -al dev/Capture && \
     ls -al dev/Freerun && \
     ls -al dev/Stop
@@ -301,31 +279,206 @@ RUN python3 -m venv venv && \
 COPY start.sh /usr/local/src/start.sh
 RUN chmod +x /usr/local/src/start.sh
 
-# new above
-#######
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+# Final command: run our script that starts all services in one container
+CMD ["/start.sh"]
 
 
 
+# # ====================================
+# # Stage 1: Base Image and OS Dependencies
+# # ====================================
+# FROM ubuntu:16.04 AS base
 
+# # Set non-interactive mode for apt-get
+# ENV DEBIAN_FRONTEND=noninteractive
 
+# # Update OS and install prerequisites
+# RUN apt-get update && \
+#     apt-get dist-upgrade -y && \
+#     apt-get install -y --no-install-recommends \
+#         software-properties-common \
+#         curl \
+#         gnupg \
+#         ca-certificates \
+#         apt-transport-https \
+#         wget \
+#         build-essential \
+#         autoconf \
+#         libtool \
+#         maven \
+#         pwgen \
+#         git \
+#         nginx \
+#         postgresql-9.5 \
+#         postgresql-server-dev-9.5 \
+#         postgresql-common \
+#         libcairo2-dev \
+#         libjpeg-turbo8-dev \
+#         libpng12-dev \
+#         libossp-uuid-dev \
+#         libfreerdp-dev \
+#         libpango1.0-dev \
+#         libssh2-1-dev \
+#         libtelnet-dev \
+#         libvncserver-dev \
+#         libpulse-dev \
+#         libssl-dev \
+#         libvorbis-dev \
+#         libwebp-dev \
+#         ghostscript \
+#         haveged \
+#         xfce4 \
+#         x11vnc \
+#         xvfb \
+#         novnc \
+#         libxrandr2 \
+#         libxrender1 \
+#         libxcursor1 \
+#         libxi6 \
+#         libxtst6 \
+#         libxxf86vm1 \
+#         avahi-daemon \
+#         dbus \
+#         libavahi-client3 && \
+#     rm -rf /var/lib/apt/lists/*
 
+# # Add PPA and install Oracle Java 8
+# RUN add-apt-repository ppa:ts.sch.gr/ppa -y && \
+#     apt-get update && \
+#     echo debconf shared/accepted-oracle-license-v1-1 select true | debconf-set-selections && \
+#     echo debconf shared/accepted-oracle-license-v1-1 seen true | debconf-set-selections && \
+#     apt-get install -y --no-install-recommends \
+#         oracle-java8-installer \
+#         oracle-java8-set-default && \
+#     rm -rf /var/lib/apt/lists/*
 
+# # # Remove the old Maven if present, and install prerequisites
+# RUN apt-get remove -y maven && \
+#     apt-get update && \
+#     apt-get install -y curl
 
+# # Set environment variables for Maven
+# ENV MAVEN_VERSION=3.6.3
+# ENV MAVEN_HOME=/opt/maven
+# ENV PATH=$MAVEN_HOME/bin:$PATH
 
+# # Install specific Maven version
+# RUN wget --no-verbose -O /tmp/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
+#       https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz && \
+#     tar -xzf /tmp/apache-maven-${MAVEN_VERSION}-bin.tar.gz -C /opt && \
+#     ln -s /opt/apache-maven-${MAVEN_VERSION} /opt/maven && \
+#     ln -s /opt/maven/bin/mvn /usr/bin/mvn && \
+#     rm /tmp/apache-maven-${MAVEN_VERSION}-bin.tar.gz
 
+# # Configure GUACAMOLE_HOME for Tomcat
+# RUN echo "" >> /etc/default/tomcat8 && \
+#     echo "# GUACAMOLE ENV VARIABLE" >> /etc/default/tomcat8 && \
+#     echo "GUACAMOLE_HOME=/etc/guacamole" >> /etc/default/tomcat8
 
+# # Create Guacamole directories & files
+# RUN mkdir -p /etc/guacamole/lib /etc/guacamole/extensions && \
+#     touch /etc/guacamole/user-mapping.xml
 
+# # ====================================
+# # Stage 2: Guacamole Server Setup
+# # ====================================
+# FROM base AS guacamole-server
 
+# WORKDIR /opt
 
+# # Clone and build Guacamole server
+# RUN git clone https://github.com/apache/incubator-guacamole-server.git && \
+#     cd incubator-guacamole-server && \
+#     autoreconf -fi && \
+#     ./configure --with-init-dir=/etc/init.d && \
+#     make && \
+#     make install && \
+#     ldconfig
 
+# # Clone and build Guacamole client (web app)
+# RUN git clone --branch 0.9.12-incubating https://github.com/apache/incubator-guacamole-client.git && \
+#     cd incubator-guacamole-client && \
+#     mvn package && \
+#     cp ./guacamole/target/guacamole-0.9.12-incubating.war /var/lib/tomcat8/webapps/guacamole.war && \
+#     cp ./extensions/guacamole-auth-jdbc/modules/guacamole-auth-jdbc-postgresql/target/guacamole-auth-jdbc-postgresql-0.9.12-incubating.jar /etc/guacamole/extensions/
 
+# # Install PostgreSQL JDBC driver
+# WORKDIR /usr/local/src
+# RUN wget -c https://jdbc.postgresql.org/download/postgresql-42.0.0.jar && \
+#     cp postgresql-42.0.0.jar /etc/guacamole/lib/
 
+# # Link FreeRDP libraries
+# RUN ln -s /usr/local/lib/freerdp/* /usr/lib/x86_64-linux-gnu/freerdp/. || true
 
-# This worked below
-# # Set the working directory
+# # Configure Guacamole properties
+# RUN echo "#api-session-timeout: 60" >> /etc/guacamole/guacamole.properties && \
+#     echo "available-languages: en" >> /etc/guacamole/guacamole.properties && \
+#     echo "guacd-hostname: localhost" >> /etc/guacamole/guacamole.properties && \
+#     echo "guacd-port: 4822" >> /etc/guacamole/guacamole.properties && \
+#     echo "#guacd-ssl: true" >> /etc/guacamole/guacamole.properties && \
+#     echo "lib-directory: /var/lib/tomcat8/webapps/guacamole/WEB-INF/classes" >> /etc/guacamole/guacamole.properties && \
+#     echo "" >> /etc/guacamole/guacamole.properties && \
+#     echo "postgresql-hostname: localhost" >> /etc/guacamole/guacamole.properties && \
+#     echo "postgresql-port: 5432" >> /etc/guacamole/guacamole.properties && \
+#     echo "postgresql-database: guacamole_db" >> /etc/guacamole/guacamole.properties && \
+#     echo "postgresql-username: guacamole_user" >> /etc/guacamole/guacamole.properties && \
+#     echo "postgresql-password: PASSWORD" >> /etc/guacamole/guacamole.properties && \
+#     echo "postgresql-user-password-min-length: 8" >> /etc/guacamole/guacamole.properties && \
+#     echo "postgresql-user-password-require-multiple-case: true" >> /etc/guacamole/guacamole.properties && \
+#     echo "postgresql-user-password-require-symbol: true" >> /etc/guacamole/guacamole.properties && \
+#     echo "postgresql-user-password-require-digit: true" >> /etc/guacamole/guacamole.properties && \
+#     echo "postgresql-user-password-prohibit-username: true" >> /etc/guacamole/guacamole.properties
+
+# # Link Guacamole home to Tomcat's .guacamole path
+# RUN rm -rf /usr/share/tomcat8/.guacamole && \
+#     ln -s /etc/guacamole /usr/share/tomcat8/.guacamole
+
+# # ====================================
+# # Stage 3: Photoneo Setup
+# # ====================================
+# FROM guacamole-server AS photoneo
+
+# # Set environment variables for Photoneo
+# ENV PHOXI_CONTROL_PATH="/opt/PhoXiControl-1.2.26"
+# ENV PHO_LOCALIZATION_PATH="/opt/PhotoneoSDK/Localization"
+
+# # Install required packages for downloading Photoneo
+# RUN apt-get update && \
+#     apt-get install -y --no-install-recommends ca-certificates && \
+#     rm -rf /var/lib/apt/lists/*
+
+# # Download and install PhoXiControl
+# RUN wget --no-verbose --output-document=/tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run \
+#     "https://www.photoneo.com/files/dw/dw/pxc/1.2.26/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run" && \
+#     chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run && \
+#     /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run --accept "${PHOXI_CONTROL_PATH}" && \
+#     rm -rf /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run
+
+# # Download and install PhoLocalization
+# RUN wget --no-verbose --output-document=/tmp/PhotoneoLocalizationSDKInstaller-1.3.4-Linux.run.tar \
+#     "https://www.photoneo.com/files/dw/dw/localization/1.3.4/PhotoneoLocalizationSDKInstaller-1.3.4-Linux-gcc5.5.0.run.tar" && \
+#     tar --extract --file=/tmp/PhotoneoLocalizationSDKInstaller-1.3.4-Linux.run.tar --directory=/tmp && \
+#     chmod +x /tmp/PhotoneoLocalizationSDKInstaller-1.3.4-Linux.run && \
+#     /tmp/PhotoneoLocalizationSDKInstaller-1.3.4-Linux.run --accept "${PHO_LOCALIZATION_PATH}" && \
+#     rm -rf /tmp/PhotoneoLocalizationSDKInstaller-1.3.4-Linux.run
+
+# # ====================================
+# # Stage 4: Build C++ Executables
+# # ====================================
+# FROM photoneo AS builder
+
+# # Install CMake dependencies and install CMake
+# RUN apt-get update && \
+#     apt-get install -y --no-install-recommends cmake && \
+#     rm -rf /var/lib/apt/lists/*
+
+# # Set working directory
 # WORKDIR /usr/local/src
 
-# # Clone the repository
+# # Clone your C++ repository
 # RUN git clone https://github.com/sequenceplanner/photoneo_campx.git
 
 # # Navigate to the cpp_executables directory
@@ -351,32 +504,44 @@ RUN chmod +x /usr/local/src/start.sh
 #     ls -al dev/Freerun && \
 #     ls -al dev/Stop
 
+# # ====================================
+# # Stage 5: Python Environment and Application Code
+# # ====================================
+# FROM builder AS app
 
+# # Set working directory
+# WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables
 
+# # Create a directory for the Flask API server
+# RUN mkdir api_server
 
+# # Copy the Flask app code into the container
+# COPY api_server/ api_server/
 
+# # Install Python dependencies
+# RUN apt-get update && \
+#     apt-get install -y --no-install-recommends \
+#         python3 \
+#         python3-pip \
+#         python3-venv && \
+#     rm -rf /var/lib/apt/lists/*
 
+# # Create a Python virtual environment and install dependencies with pip 20.3.4
+# RUN python3 -m venv venv && \
+#     ./venv/bin/pip install --upgrade "pip==20.3.4" && \
+#     ./venv/bin/pip install -r api_server/requirements.txt
 
+# # ====================================
+# # Stage 6: Final Runtime Image
+# # ====================================
+# FROM app AS final
 
+# # Copy start.sh and make it executable
+# COPY start.sh /start.sh
+# RUN chmod +x /start.sh
 
+# # Expose ports
+# EXPOSE 8080 4822 5432 5901 6901 5000
 
-
-# Build Capture: This works
-# RUN cd /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables && \
-#     mkdir -p dev && \
-#     cd dev && \
-#     cmake ../Connect . -DCMAKE_BUILD_TYPE=Release && \
-#     make
-#     # make -j"$(nproc)"
-
-# RUN cd photoneo_campx/phoxi_control_interface/cpp_executables/Connect \
-#     && mkdir build \
-#     && cd build \
-#     && cmake .. \
-#     && make
-
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
-
-# Final command: run our script that starts all services in one container
-CMD ["/start.sh"]
+# # Final command to run the services
+# CMD ["/start.sh"]
