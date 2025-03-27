@@ -1,40 +1,74 @@
-# Setup
-1. Start the docker with: 
+## Startup PhoXiControl
+The PhoXiControl has to ru in order for the camera to be able to scan. Unfortunately it is not possible only to use API calls to trigger scanning, PhoXiControl has to be running. More information in the manual.
+1. Make a shared folder.
+```
+mkdir docker_mount
+```
+2. Open the docker-compose.yml and change the shared folder path from:
+```
+volumes:
+    - /home/endre/docker_mount/:/root/Desktop
+```
+to:
+```
+volumes:
+    - /PATH/docker_mount/:/root/Desktop
+```
+where PATH is your path to the shared folder.
+
+3. Start the docker with: 
 ```
 sudo docker-compose up --build
 ```
-2. Open a web browsed and go to vnc:
+4. Open a web browsed and go to vnc:
 ```
 0.0.0.0:6901
 ```
-3. In the docker, open a new terminal and type:
+5. In the docker, open a new terminal and type:
 ```
 PhoXiControl
 ```
-4. The PhoXiControl interface should start. Now add the scanner:
+6. The PhoXiControl interface should start. Now add the scanner:
 ```
 menu -> Add Device via IP
 ```
-5. Enter the device id:
+7. Enter the device id:
 ```
 volvo_photoneo -> 1708011
 chalmers_photoneo -> 2019-08-079-LC3
 ```
-6. Enter the device static IP:
+8. Enter the device static IP:
 ```
 volvo_photoneo -> 192.168.1.27
 chalmers_photoneo -> 192.168.1.103
 ```
+
 ## Architecture
+There is also a shared folder that everyone should be able to access. Here we will store the CADS, 
+the prepared items, the scans, the results, metadata, meshes, etc.
+
 The idea is to have Redis instance in a Docker and connecto to it from the Photoneo docker, Streamlit, etc.
 Goal is also to try to have the phoxi interface in another docker, and the localization interface in a third docker.
 Lets see if this can be done...
 
-## Preparation
-#### Overview: 
-1. Aligning the origin coordinates. 
+## Startup Photoneo Localization Config
+This is necessary for preparation pursposes only, since we can perform localiation only with API calls. Note that the licence key has to be inserted even if the GUI is not used.
 
-Motivation: Prepared CAD files come with origins that are placed in inconvenient positions, and often outside the actual component (as they have probably been exported in batch as parts of a bigger assembly). In order to properly visualize meshes and picking frames during detection, it is preferred that the origins are adjusted to match the main picking point and that the meshes used for vizualization have the same origin as the CAD files or meshes used for localization.
+1. Insert blue licence USB stick
+2. Steps 3 and 4 as above
+3. In the docker, open a new terminal and type:
+```
+PhoLocConfig
+```
+
+## Preparation
+### Chapter 1: Aligning the origin coordinates (Optional)
+
+This step is optional, we can still use the CAD files original origin frame, and prepare the secondary pick points in relation to that.
+
+IMPORTANT: In neither case should the Localization origin shown when preparing a .plcf in the PhoLocConfig be moved. This is because is has to match the CAD file's origin, and it is the origin that we use to calculate transformations to the actual pick points. 
+
+MOTIVATION: Prepared CAD files come with origins that are placed in assembly origins positions, often outside the actual component (as they have probably been exported in batch as parts of a bigger assembly). In order to properly visualize meshes and picking frames during detection, it is preferred that the origins are adjusted to match the main picking point and that the meshes used for vizualization have the same origin as the CAD files or meshes used for localization.
 #### Step 1
 A CAD software is needed here, Autocad, Freecad, or similar, I am for example using Auodesk Inventor. In Autodesk Inventor, create a new Assembly.
 
@@ -96,8 +130,11 @@ Export the assembly now in a .stp CAD format for localization, and a .stl MESH f
 
 ![alt text](instruction_images/preparation_16.png)
 ![alt text](instruction_images/preparation_17.png)
+
+## Chapter 2:
+
 #### Step 17
-Start the Photoneo Localization software and import the prepared CAD file to verify the good position of the origin coordinate frame. The goal is to not manipulate the origin in the localization software, so all the coordinates and angles should be left as 0.
+Start the Photoneo Localization software and import the prepared CAD file Do not manipulate the origin in the localization software, so all the coordinates and angles should be left as 0 even if the pick point is outsode the item (matching the CAD origin frame).
 
 ![alt text](instruction_images/preparation_18.png)
 

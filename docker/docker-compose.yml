@@ -13,7 +13,7 @@ services:
       - "5901:5901"   # vnc
       - "6901:6901"   # NoVNC
       - "5000:5000"   # Flask REST API
-    privileged: false
+    privileged: true
     shm_size: "2g"
     volumes:
       - /home/endre/docker_mount/:/root/Desktop
