@@ -1,3 +1,5 @@
+# The Photoneo control interface
+
 ## Startup PhoXiControl
 The PhoXiControl has to ru in order for the camera to be able to scan. Unfortunately it is not possible only to use API calls to trigger scanning, PhoXiControl has to be running. More information in the manual.
 1. Make a shared folder.
@@ -50,16 +52,6 @@ the prepared items, the scans, the results, metadata, meshes, etc.
 The idea is to have Redis instance in a Docker and connecto to it from the Photoneo docker, Streamlit, etc.
 Goal is also to try to have the phoxi interface in another docker, and the localization interface in a third docker.
 Lets see if this can be done...
-
-## Startup Photoneo Localization Config
-This is necessary for preparation pursposes only, since we can perform localiation only with API calls. Note that the licence key has to be inserted even if the GUI is not used.
-
-1. Insert blue licence USB stick
-2. Steps 3 and 4 as above
-3. In the docker, open a new terminal and type:
-```
-PhoLocConfig
-```
 
 ## Preparation
 ### Chapter 1: Aligning the origin coordinates (Optional)
@@ -131,30 +123,43 @@ Export the assembly now in a .stp CAD format for localization, and a .stl MESH f
 ![alt text](instruction_images/preparation_16.png)
 ![alt text](instruction_images/preparation_17.png)
 
-## Chapter 2:
+### Chapter 2: Generating localiazation files
 
-#### Step 17
+#### Startup Photoneo Localization Config
+This is necessary for preparation pursposes only, since we can perform localiation only with API calls. Note that the licence key has to be inserted even if the GUI is not used.
+
+1. Insert blue licence USB stick
+2. Steps 3 and 4 as above
+3. In the docker, open a new terminal and type:
+```
+PhoLocConfig
+```
+
+#### Step 1
 Start the Photoneo Localization software and import the prepared CAD file Do not manipulate the origin in the localization software, so all the coordinates and angles should be left as 0 even if the pick point is outsode the item (matching the CAD origin frame).
 
 ![alt text](instruction_images/preparation_18.png)
 
-#### Step 18
+#### Step 2a
 Next, connect the Photoneo scanner and open the Phoxi Control software. Position the scanner so that the components are visible. Note that the scanning volume of the photoneo model S is quite small. Trigger a scan. 
+
+#### Step 2b (Alternative)
+Scan the items in advance and then search for the scans in th Localization Config instead of doing it live. The advantage of doing it live is that it allows saving of specific parameters for each individual item in order to achive best detection.
 
 ![alt text](instruction_images/photoneo_s_range.png)
 ![alt text](instruction_images/scan_setup.jpg)
 ![alt text](instruction_images/scanning.jpg)
-#### Step 19
+#### Step 3
 The Phoxi control software should now visualize the point cloud. Make sure that the components to be localized are visible. If so, save the current scan, either in .ply or .praw. (.praw might hold more information, and it can be later converted to other formats if necessary, so .praw might be favored).
 
 ![alt text](instruction_images/preparation_19.png)
-#### Step 20
+#### Step 4
 Open the localization software and select the prepared CAD file. After inspecting that the origin is correct, go next while leaving the positions and orientations at 0. The software now allows a "live" scanner view, or a saved scan in order to test the localization and prepare a localization file (.plcf). Since we have saved a scan where the parts are visible, select "file" in the testing window and find the saved .praw file. The point cloud should now be loaded.
 
 ![alt text](instruction_images/preparation_20.png)
-#### Step 21
+#### Step 5
 Select a number od instances you would like to test for and start the localization. The localized items should now be highlightd and the overlap confidences displayed.
 
 ![alt text](instruction_images/preparation_21.png)
-#### Step 22
+#### Step 6
 Tweak the setting so see if the confidences can be increased and save the settings. This can be done per prepared item and later used as a parameter. TODO: Expland this and show how to.

@@ -10,10 +10,12 @@ use std::sync::mpsc as sync_mpsc;
 use super::state::ScanRequest;
 
 pub async fn photoneo_control_interface(
-    photoneo_name: &str,
+    name: String,
     command_sender: mpsc::Sender<StateManagement>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut interval = interval(Duration::from_millis(100));
+
+    log::info!(target: &&format!("phoxi_control_interface"), "Online.");
 
     loop {
         let (response_tx, response_rx) = oneshot::channel();
@@ -22,203 +24,93 @@ pub async fn photoneo_control_interface(
             .await?;
         let state = response_rx.await?;
 
-        let mut request_trigger = match state.get_value(&format!("{photoneo_name}_request_trigger"))
-        {
-            micro_sp::SPValue::Bool(value) => value,
-            _ => {
-                log::error!(target: &&format!(
-                    "{photoneo_name}_control_interface"),
-                    "Couldn't get {} from the shared state.",
-                    &format!("{photoneo_name}_request_trigger")
-                );
-                false
-            }
-        };
-        let mut request_state = match state.get_value(&format!("{photoneo_name}_request_state")) {
-            micro_sp::SPValue::String(value) => value,
-            _ => {
-                log::error!(target: &&format!(
-                    "{photoneo_name}_control_interface"),
-                    "Couldn't get {} from the shared state.",
-                    &format!("{photoneo_name}_request_state")
-                );
-                SPValue::Unknown(SPValueType::String).to_string()
-            }
-        };
+        let mut request_trigger = state.get_bool_or_default_to_false(
+            &format!("{}_control_interface", name),
+            &format!("{}_request_trigger", name),
+        );
+
+        let mut request_state = state.get_string_or_default_to_unknown(
+            &format!("{}_control_interface", name),
+            &format!("{}_request_state", name),
+        );
 
         if request_trigger {
             request_trigger = false;
             if request_state == ServiceRequestState::Initial.to_string() {
-                let name_identification =
-                    match state.get_value(&format!("{photoneo_name}_name_identification")) {
-                        micro_sp::SPValue::String(value) => value,
-                        _ => {
-                            log::error!(target: &&format!(
-                                "{photoneo_name}_control_interface"),
-                                "Couldn't get {} from the shared state.",
-                                &format!("{photoneo_name}_name_identification")
-                            );
-                            SPValue::Unknown(SPValueType::String).to_string()
-                        }
-                    };
+                let name_identification = state.get_string_or_default_to_unknown(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_name_identification", name),
+                );
 
-                let hardware_identification =
-                    match state.get_value(&format!("{photoneo_name}_hardware_identification")) {
-                        micro_sp::SPValue::String(value) => value,
-                        _ => {
-                            log::error!(target: &&format!(
-                                "{photoneo_name}_control_interface"),
-                                "Couldn't get {} from the shared state.",
-                                &format!("{photoneo_name}_hardware_identification")
-                            );
-                            SPValue::Unknown(SPValueType::String).to_string()
-                        }
-                    };
+                let hardware_identification = state.get_string_or_default_to_unknown(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_hardware_identification", name),
+                );
 
-                let ip_identification =
-                    match state.get_value(&format!("{photoneo_name}_ip_identification")) {
-                        micro_sp::SPValue::String(value) => value,
-                        _ => {
-                            log::error!(target: &&format!(
-                                "{photoneo_name}_control_interface"),
-                                "Couldn't get {} from the shared state.",
-                                &format!("{photoneo_name}_ip_identification")
-                            );
-                            SPValue::Unknown(SPValueType::String).to_string()
-                        }
-                    };
+                let ip_identification = state.get_string_or_default_to_unknown(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_ip_identification", name),
+                );
 
-                let mut phoxi_raw_info =
-                    match state.get_value(&format!("{photoneo_name}_phoxi_raw_info")) {
-                        micro_sp::SPValue::String(value) => value,
-                        _ => {
-                            log::error!(target: &&format!(
-                                "{photoneo_name}_control_interface"),
-                                "Couldn't get {} from the shared state.",
-                                &format!("{photoneo_name}_phoxi_raw_info")
-                            );
-                            SPValue::Unknown(SPValueType::String).to_string()
-                        }
-                    };
+                let phoxi_raw_info;
 
-                let command_type = match state.get_value(&format!("{photoneo_name}_command_type")) {
-                    micro_sp::SPValue::String(value) => value,
-                    _ => {
-                        log::error!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
-                            "Couldn't get {} from the shared state.",
-                            &format!("{photoneo_name}_command_type")
-                        );
-                        SPValue::Unknown(SPValueType::String).to_string()
-                    }
+                let command_type = state.get_string_or_default_to_unknown(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_command_type", name),
+                );
+
+                let scene_name = state.get_string_or_default_to_unknown(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_scene_name", name),
+                );
+
+                let praw = match state.get_bool_or_unknown(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_praw", name),
+                ) {
+                    BoolOrUnknown::UNKNOWN => true,
+                    BoolOrUnknown::Bool(val) => val,
                 };
 
-                let scene_name = match state.get_value(&format!("{photoneo_name}_scene_name")) {
-                    micro_sp::SPValue::String(value) => value,
-                    _ => {
-                        log::error!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
-                            "Couldn't get {} from the shared state.",
-                            &format!("{photoneo_name}_scene_name")
-                        );
-                        SPValue::Unknown(SPValueType::String).to_string()
-                    }
+                let ply = state.get_bool_or_default_to_false(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_ply", name),
+                );
+
+                let tif = state.get_bool_or_default_to_false(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_tif", name),
+                );
+
+                let praw_dir = state.get_string_or_default_to_unknown(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_praw_dir", name),
+                );
+
+                let ply_dir = state.get_string_or_default_to_unknown(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_ply_dir", name),
+                );
+
+                let tif_dir = state.get_string_or_default_to_unknown(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_tif_dir", name),
+                );
+
+                let timeout = match state.get_int_or_unknown(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_timeout", name),
+                ) {
+                    IntOrUnknown::UNKNOWN => 5000,
+                    IntOrUnknown::Int64(int) => int,
                 };
 
-                let praw = match state.get_value(&format!("{photoneo_name}_praw")) {
-                    micro_sp::SPValue::Bool(value) => value,
-                    _ => {
-                        log::error!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
-                            "Couldn't get {} from the shared state.",
-                            &format!("{photoneo_name}_praw")
-                        );
-                        true
-                    }
-                };
-
-                let ply = match state.get_value(&format!("{photoneo_name}_ply")) {
-                    micro_sp::SPValue::Bool(value) => value,
-                    _ => {
-                        log::error!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
-                            "Couldn't get {} from the shared state.",
-                            &format!("{photoneo_name}_ply")
-                        );
-                        false
-                    }
-                };
-
-                let tif = match state.get_value(&format!("{photoneo_name}_tif")) {
-                    micro_sp::SPValue::Bool(value) => value,
-                    _ => {
-                        log::error!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
-                            "Couldn't get {} from the shared state.",
-                            &format!("{photoneo_name}_tif")
-                        );
-                        false
-                    }
-                };
-
-                let praw_dir = match state.get_value(&format!("{photoneo_name}_praw_dir")) {
-                    micro_sp::SPValue::String(value) => value,
-                    _ => {
-                        log::error!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
-                            "Couldn't get {} from the shared state.",
-                            &format!("{photoneo_name}_praw_dir")
-                        );
-                        SPValue::Unknown(SPValueType::String).to_string()
-                    }
-                };
-
-                let ply_dir = match state.get_value(&format!("{photoneo_name}_ply_dir")) {
-                    micro_sp::SPValue::String(value) => value,
-                    _ => {
-                        log::error!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
-                            "Couldn't get {} from the shared state.",
-                            &format!("{photoneo_name}_ply_dir")
-                        );
-                        SPValue::Unknown(SPValueType::String).to_string()
-                    }
-                };
-
-                let tif_dir = match state.get_value(&format!("{photoneo_name}_tif_dir")) {
-                    micro_sp::SPValue::String(value) => value,
-                    _ => {
-                        log::error!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
-                            "Couldn't get {} from the shared state.",
-                            &format!("{photoneo_name}_tif_dir")
-                        );
-                        SPValue::Unknown(SPValueType::String).to_string()
-                    }
-                };
-
-                let timeout = match state.get_value(&format!("{photoneo_name}_timeout")) {
-                    micro_sp::SPValue::Int64(value) => value,
-                    _ => {
-                        log::error!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
-                            "Couldn't get {} from the shared state.",
-                            &format!("{photoneo_name}_timeout")
-                        );
-                        5000
-                    }
-                };
-
-                let settings = match state.get_value(&format!("{photoneo_name}_settings")) {
-                    micro_sp::SPValue::String(value) => value,
-                    _ => {
-                        log::error!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
-                            "Couldn't get {} from the shared state.",
-                            &format!("{photoneo_name}_settings")
-                        );
-                        "default".to_string()
-                    }
+                let settings = match state.get_string_or_unknown(
+                    &format!("{}_control_interface", name),
+                    &format!("{}_tif_dir", name),
+                ) {
+                    StringOrUnknown::UNKNOWN => "default".to_string(),
+                    StringOrUnknown::String(val) => val,
                 };
 
                 let scan_request = ScanRequest {
@@ -237,10 +129,10 @@ pub async fn photoneo_control_interface(
                     settings,
                 };
 
-                match call_blocking_exec(scan_request, photoneo_name) {
+                match call_blocking_exec(scan_request, &name) {
                     Ok(val) => {
                         log::info!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
+                            "{name}_control_interface"),
                             "Photoneo succeeded."
                         );
                         request_state = ServiceRequestState::Succeeded.to_string();
@@ -248,7 +140,7 @@ pub async fn photoneo_control_interface(
                     }
                     Err(e) => {
                         log::error!(target: &&format!(
-                            "{photoneo_name}_control_interface"),
+                            "{name}_control_interface"),
                             "Photoneo failed."
                         );
                         request_state = ServiceRequestState::Failed.to_string();
@@ -258,15 +150,15 @@ pub async fn photoneo_control_interface(
 
                 let new_state = state
                     .update(
-                        &format!("{photoneo_name}_request_trigger"),
+                        &format!("{name}_request_trigger"),
                         request_trigger.to_spvalue(),
                     )
                     .update(
-                        &format!("{photoneo_name}_request_state"),
+                        &format!("{name}_request_state"),
                         request_state.to_spvalue(),
                     )
                     .update(
-                        &format!("{photoneo_name}_phoxi_raw_info"),
+                        &format!("{name}_phoxi_raw_info"),
                         phoxi_raw_info.to_spvalue(),
                     );
 

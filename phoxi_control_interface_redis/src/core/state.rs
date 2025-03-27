@@ -17,9 +17,9 @@ pub fn generate_photoneo_interface_state(photoneo_name: &str) -> State {
     let hardware_identification = v!(&&format!("{}_hardware_identification", photoneo_name));
     let ip_identification = v!(&&format!("{}_ip_identification", photoneo_name));
 
-    let state = state.add(assign!(name_identification, SPValue::Unknown(SPValueType::String)));
-    let state = state.add(assign!(hardware_identification, SPValue::Unknown(SPValueType::String)));
-    let state = state.add(assign!(ip_identification, SPValue::Unknown(SPValueType::String)));
+    let state = state.add(assign!(name_identification, SPValue::String(StringOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(hardware_identification, SPValue::String(StringOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(ip_identification, SPValue::String(StringOrUnknown::UNKNOWN)));
 
     let command_type = v!(&&format!("{}_command_type", photoneo_name));
     let scene_name = v!(&&format!("{}_scene_name", photoneo_name));
@@ -32,16 +32,16 @@ pub fn generate_photoneo_interface_state(photoneo_name: &str) -> State {
     let timeout = iv!(&&format!("{}_timeout", photoneo_name));
     let settings = v!(&&format!("{}_settings", photoneo_name));
 
-    let state = state.add(assign!(command_type, SPValue::Unknown(SPValueType::String)));
-    let state = state.add(assign!(scene_name, SPValue::Unknown(SPValueType::String)));
-    let state = state.add(assign!(praw, SPValue::Unknown(SPValueType::Bool)));
-    let state = state.add(assign!(ply, SPValue::Unknown(SPValueType::Bool)));
-    let state = state.add(assign!(tif, SPValue::Unknown(SPValueType::Bool)));
-    let state = state.add(assign!(praw_dir, SPValue::Unknown(SPValueType::String)));
-    let state = state.add(assign!(ply_dir, SPValue::Unknown(SPValueType::String)));
-    let state = state.add(assign!(tif_dir, SPValue::Unknown(SPValueType::String)));
-    let state = state.add(assign!(timeout, SPValue::Unknown(SPValueType::Int64)));
-    let state = state.add(assign!(settings, SPValue::Unknown(SPValueType::String)));
+    let state = state.add(assign!(command_type, SPValue::String(StringOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(scene_name, SPValue::String(StringOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(praw, SPValue::Bool(BoolOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(ply, SPValue::Bool(BoolOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(tif, SPValue::Bool(BoolOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(praw_dir, SPValue::String(StringOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(ply_dir, SPValue::String(StringOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(tif_dir, SPValue::String(StringOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(timeout, SPValue::Int64(IntOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(settings, SPValue::String(StringOrUnknown::UNKNOWN)));
 
     state
 }
