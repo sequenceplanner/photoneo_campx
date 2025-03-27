@@ -1,9 +1,35 @@
 # Setup
-asdf
+1. Start the docker with: 
+```
+sudo docker-compose up --build
+```
+2. Open a web browsed and go to vnc:
+```
+0.0.0.0:6901
+```
+3. In the docker, open a new terminal and type:
+```
+PhoXiControl
+```
+4. The PhoXiControl interface should start. Now add the scanner:
+```
+menu -> Add Device via IP
+```
+5. Enter the device id:
+```
+volvo_photoneo -> 1708011
+chalmers_photoneo -> 2019-08-079-LC3
+```
+6. Enter the device static IP:
+```
+volvo_photoneo -> 192.168.1.27
+chalmers_photoneo -> 192.168.1.103
+```
 ## Architecture
-asdf
-## Network setup
-asdf
+The idea is to have Redis instance in a Docker and connecto to it from the Photoneo docker, Streamlit, etc.
+Goal is also to try to have the phoxi interface in another docker, and the localization interface in a third docker.
+Lets see if this can be done...
+
 ## Preparation
 #### Overview: 
 1. Aligning the origin coordinates. 

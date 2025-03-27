@@ -25,11 +25,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (tx, rx) = mpsc::channel(32);
     let state_clone = state.clone();
     tokio::task::spawn(async move { redis_state_manager(rx, state_clone).await });
-    tokio::task::spawn(async move {
-        photoneo_control_interface(photoneo_name, tx)
+
+    photoneo_control_interface(photoneo_name, tx)
             .await
-            .unwrap()
-    });
+            .unwrap();
 
     Ok(())
 }
