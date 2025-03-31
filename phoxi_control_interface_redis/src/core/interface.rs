@@ -141,7 +141,7 @@ pub async fn photoneo_control_interface(
                     Err(e) => {
                         log::error!(target: &&format!(
                             "{name}_control_interface"),
-                            "Photoneo failed."
+                            "Photoneo failed with error: {}.", e
                         );
                         request_state = ServiceRequestState::Failed.to_string();
                         phoxi_raw_info = e.to_string();
