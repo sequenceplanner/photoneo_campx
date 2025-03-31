@@ -153,10 +153,7 @@ pub async fn photoneo_control_interface(
                         &format!("{name}_request_trigger"),
                         request_trigger.to_spvalue(),
                     )
-                    .update(
-                        &format!("{name}_request_state"),
-                        request_state.to_spvalue(),
-                    )
+                    .update(&format!("{name}_request_state"), request_state.to_spvalue())
                     .update(
                         &format!("{name}_phoxi_raw_info"),
                         phoxi_raw_info.to_spvalue(),
@@ -432,6 +429,14 @@ fn prepare_arguments(request: &ScanRequest, photoneo_name: &str) -> Vec<String> 
 
     // 30 - Where to save the tif files
     args_list.push(request.tif_dir.clone());
+
+    // 31 - ip Identification
+    args_list.push(
+        parameters["ip_identification"]
+            .as_str()
+            .unwrap()
+            .to_string(),
+    );
 
     args_list
 }

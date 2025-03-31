@@ -51,7 +51,7 @@ void ConnectIPv4::ConnectPhoXiDeviceByIPAddress(int argc, char* argv[])
     using PhoXiDeviceType = pho::api::PhoXiDeviceType;
     deviceType = static_cast<std::string>(PhoXiDeviceType(PhoXiDeviceType::PhoXiScanner));
     std::string HWIdentification = argv[1];
-    std::string Ip = argv[2];
+    std::string Ip = argv[31];
     PhoXiDevice = Factory.CreateAndConnect(HWIdentification, deviceType, Ip);
     if (PhoXiDevice)
     {
