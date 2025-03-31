@@ -221,7 +221,7 @@ fn prepare_arguments(request: &ScanRequest, photoneo_name: &str) -> Vec<String> 
 
     // 0 - executable name
     args_list.push(format!(
-        "{}/cpp_executables/{}/{}_Release",
+        "{}/cpp_executables/dev/{}/{}_Release",
         manifest_dir, capcom, capcom
     ));
 
