@@ -31,6 +31,7 @@ pub fn generate_photoneo_interface_state(photoneo_name: &str) -> State {
     let tif_dir = v!(&&format!("{}_tif_dir", photoneo_name));
     let timeout = iv!(&&format!("{}_timeout", photoneo_name));
     let settings = v!(&&format!("{}_settings", photoneo_name));
+    let phoxi_raw_info = v!(&&format!("{}_phoxi_raw_info", photoneo_name));
 
     let state = state.add(assign!(command_type, SPValue::String(StringOrUnknown::UNKNOWN)));
     let state = state.add(assign!(scene_name, SPValue::String(StringOrUnknown::UNKNOWN)));
@@ -42,6 +43,7 @@ pub fn generate_photoneo_interface_state(photoneo_name: &str) -> State {
     let state = state.add(assign!(tif_dir, SPValue::String(StringOrUnknown::UNKNOWN)));
     let state = state.add(assign!(timeout, SPValue::Int64(IntOrUnknown::UNKNOWN)));
     let state = state.add(assign!(settings, SPValue::String(StringOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(phoxi_raw_info, SPValue::String(StringOrUnknown::UNKNOWN)));
 
     state
 }

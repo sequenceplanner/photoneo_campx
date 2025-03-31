@@ -186,7 +186,7 @@ RUN apt-get update && apt-get install -y \
     libxtst6 \
     libxxf86vm1
 
-# PhoXiControl apparently uses mDNS or DNS-SD for device discovery, 
+# PhoXiControl apparently uses mDNS or DNS-SD for device discovery,
 # requiring an Avahi client and a running Avahi daemon. If the daemon
 # isn’t present, PhoXiControl throws std::runtime_error:
 RUN apt-get update && apt-get install -y \
@@ -229,7 +229,7 @@ WORKDIR /usr/local/src
 RUN git clone https://github.com/sequenceplanner/photoneo_campx.git
 
 # Navigate to the cpp_executables directory
-WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables
+WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface_redis/cpp_executables
 
 # Create a 'dev' directory for build artifacts
 RUN mkdir -p dev
@@ -252,35 +252,52 @@ RUN ls -al dev/Connect && \
     ls -al dev/Freerun && \
     ls -al dev/Stop
 
-# Set up Python environment for Flask
-WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables
+# --- Additions for Rust phoxi_ci Application ---
 
-# Create a directory for the Flask API server
-RUN mkdir api_server
+# --- DEBUGGING: Verify Rust directory exists after initial clone ---
+    RUN echo "DEBUG: Checking contents of /usr/local/src/photoneo_campx:" && \
+    ls -la /usr/local/src/photoneo_campx/ && \
+    echo "DEBUG: Checking existence of target Rust directory:" && \
+    ls -ld /usr/local/src/photoneo_campx/phoxi_control_interface_redis/ || \
+    echo "DEBUG: Target Rust directory /usr/local/src/photoneo_campx/phoxi_control_interface_redis/ NOT FOUND or ls failed!"
+# --- End Debugging ---
 
-# Copy the Flask app code into the container
-COPY api_server/ api_server/
 
-# Navigate to the Flask app directory
-WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface/cpp_executables/api_server
+# --- Additions for Rust phoxi_ci Application ---
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        python3 \
-        python3-pip \
-        python3-venv
+# Install Rust prerequisites
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create a Python virtual environment and install dependencies with pip 20.3.4
-RUN python3 -m venv venv && \
-    ./venv/bin/pip install --upgrade "pip==20.3.4" && \
-    ./venv/bin/pip install -r requirements.txt
+# Install Rust using rustup
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal \
+    && chmod -R a+w $RUSTUP_HOME $CARGO_HOME
 
-# Make start.sh executable
-COPY start.sh /usr/local/src/start.sh
-RUN chmod +x /usr/local/src/start.sh
+# --- Adjust WORKDIR for Rust build ---
+# Change to the correct path for your Rust project INSIDE the ALREADY CLONED repo
+WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface_redis/
 
+# --- Add this line for debugging ---
+# List the contents of the current directory to ensure Cargo.toml is present
+RUN ls -la
+# --- End debugging line ---
+
+# Add any build dependencies needed by your Rust app here using apt-get if necessary
+# RUN apt-get update && apt-get install -y <rust_build_dependency> && rm -rf /var/lib/apt/lists/*
+
+# Build the Rust application (this now runs in the correct subdirectory)
+RUN cargo build --release
+
+# Reset WORKDIR back to root or another sensible default if needed
+WORKDIR /
+
+# --- End of Additions for Rust ---
+
+# (Make sure the COPY start.sh and CMD ["/start.sh"] lines are still at the end)
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
-# Final command: run our script that starts all services in one container
 CMD ["/start.sh"]
