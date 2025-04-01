@@ -223,12 +223,14 @@ fn prepare_arguments(request: &ScanRequest, photoneo_name: &str) -> Vec<String> 
     ));
 
     // 1 - scanner hardware identification
-    args_list.push(
-        parameters["hardware_identification"]
-            .as_str()
-            .unwrap()
-            .to_string(),
-    );
+    // args_list.push(
+    //     parameters["hardware_identification"]
+    //         .as_str()
+    //         .unwrap()
+    //         .to_string(),
+    // );
+
+    args_list.push(request.hardware_identification.to_string());
 
     // 2 - scene name
     args_list.push(request.scene_name.clone());

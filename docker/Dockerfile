@@ -119,6 +119,12 @@ RUN ldconfig
 # Install a self-signed dhparam for Nginx (this can be slow)
 RUN mkdir -p /etc/nginx/ssl && cd /etc/nginx/ssl && openssl dhparam -out dhparams.pem 2048
 
+# --- Point where you might want to force a rebuild ---
+# Define a build argument for cache busting
+ARG CACHE_BUST=2
+# Use the argument in a command. Changing CACHE_BUST invalidates this layer.
+RUN echo "Cache bust value: ${CACHE_BUST}" > /cache_buster.txt
+
 # Configure environment variable for photoneo
 ENV PHOXI_CONTROL_PATH="/opt/PhoXiControl-1.2.26"
 ENV PHO_LOCALIZATION_PATH="/opt/PhotoneoSDK/Localization"
@@ -150,6 +156,39 @@ RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run \
 
 # Clean up afterwards
 RUN rm -rf /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run
+
+# Configure environment variable for photoneo
+# ENV PHOXI_CONTROL_PATH="/opt/PhotoneoPhoXiControl"
+# ENV PHO_LOCALIZATION_PATH="/opt/PhotoneoSDK/Localization"
+
+# # Install required packages for downloading photoneo (including wget)
+# RUN apt-get update
+# RUN apt-get install -y ca-certificates
+# RUN rm -rf /var/lib/apt/lists/*
+
+# # Download the PhoXiControl
+# RUN wget \
+#      --no-verbose \
+#      --output-document=/tmp/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.tar \
+#      "https://www.photoneo.com/files/dw/dw/pxc/1.2.14/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.tar"
+
+# # Extract the tar.gz archive into /tmp
+# RUN tar --extract \
+#      --file=/tmp/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.tar \
+#      --directory=/tmp
+
+# # Ensure the installer files have execution permissions
+# RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.run
+# # RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu16-STABLE.run
+
+# # Install PhoXiControl to the specified directory
+# # RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu16-STABLE.run \
+# RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.run 
+# # \
+#     #  --accept "${PHOXI_CONTROL_PATH}"
+
+# # Clean up afterwards
+# RUN rm -rf /tmp/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.run
 
 # Download PhoLocalization
 RUN wget \
