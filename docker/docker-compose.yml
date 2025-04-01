@@ -1,34 +1,52 @@
----
-
 version: "3.9"
 
 services:
-  all-in-one:
-    build: .
-    container_name: photoneo-all-in-one
+  redis:
+    image: redis:latest
+    container_name: redis
+    networks:
+      - photoneo-net
+
+  photoneo: 
+    build: /home/endre/photoneo_ws/src/photoneo_campx/docker/
+    container_name: photoneo
     ports:
-      - "8080:8080"   # Tomcat / Guacamole web
-      - "4822:4822"   # guacd
-      - "5432:5432"   # PostgreSQL
-      - "5901:5901"   # vnc
-      - "6901:6901"   # NoVNC
-      - "5000:5000"   # Flask REST API
+      - "8080:8080" # Guacamole Web Interface / Tomcat
+      - "4822:4822" # Guacd (Guacamole Daemon)
+      - "5432:5432" # PostgreSQL (Ensure PG binds to 0.0.0.0 inside container if needed externally)
+      - "5901:5901" # VNC Server (x11vnc)
+      - "6901:6901" # noVNC Websocket Proxy
     privileged: true
-    shm_size: "2g"
+    shm_size: "2g"  # Need this for PhoXiControl not to crash when scanning
     volumes:
-      - /home/endre/docker_mount/:/root/Desktop
-    extra_hosts:
+      - /home/endre/photoneo_ws/src/docker_mount/:/root/Desktop
+    extra_hosts: # Docker, so need this 
       - "host.docker.internal:host-gateway"
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # THIS IS A NASTY HACK, CHANGE!
+      - CARGO_MANIFEST_DIR=/usr/local/src/photoneo_campx/phoxi_control_interface_redis
+    depends_on:
+      # Note: This doesn't guarantee Redis *service* inside is ready, need retry logic
+      - redis
+    networks:
+      - photoneo-net
 
-  phoxi_ci:
-    build:
-      context: ../phoxi_control_interface_redis
-      dockerfile: docker/Dockerfile
-    container_name: phoxi_ci
-    # command: cargo run
+  streamlit:
+    build: /home/endre/photoneo_ws/src/micro_sp_ui/
+    container_name: streamlit
+    ports:
+      - "8501:8501"
+    depends_on:
+      - redis
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+    networks:
+      - photoneo-net
+
+# Define the custom network used by all services
+networks:
+  photoneo-net:
+    driver: bridge

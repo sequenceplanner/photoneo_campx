@@ -1,3 +1,4 @@
+# Base image is ubuntu 16.04
 FROM ubuntu:16.04
 
 # Noninteractive install
@@ -51,7 +52,7 @@ RUN apt-get remove -y maven && \
     apt-get update && \
     apt-get install -y curl
 
-# Need a very specific Maven version, install Maven 3.6.3 manually
+# Headache #1: Need a very specific Maven version, install Maven 3.6.3 manually
 ENV MAVEN_VERSION=3.6.3
 RUN wget --no-verbose -O /tmp/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
       https://archive.apache.org/dist/maven/maven-3/3.6.3/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
@@ -119,12 +120,7 @@ RUN ldconfig
 # Install a self-signed dhparam for Nginx (this can be slow)
 RUN mkdir -p /etc/nginx/ssl && cd /etc/nginx/ssl && openssl dhparam -out dhparams.pem 2048
 
-# --- Point where you might want to force a rebuild ---
-# Define a build argument for cache busting
-ARG CACHE_BUST=2
-# Use the argument in a command. Changing CACHE_BUST invalidates this layer.
-RUN echo "Cache bust value: ${CACHE_BUST}" > /cache_buster.txt
-
+# Headache #2: Figure out the compatible versions
 # Configure environment variable for photoneo
 ENV PHOXI_CONTROL_PATH="/opt/PhoXiControl-1.2.26"
 ENV PHO_LOCALIZATION_PATH="/opt/PhotoneoSDK/Localization"
@@ -147,48 +143,13 @@ RUN tar --extract \
 
 # Ensure the installer files have execution permissions
 RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run
-# RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu16-STABLE.run
 
 # Install PhoXiControl to the specified directory
-# RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu16-STABLE.run \
 RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run \
      --accept "${PHOXI_CONTROL_PATH}"
 
 # Clean up afterwards
 RUN rm -rf /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu.run
-
-# Configure environment variable for photoneo
-# ENV PHOXI_CONTROL_PATH="/opt/PhotoneoPhoXiControl"
-# ENV PHO_LOCALIZATION_PATH="/opt/PhotoneoSDK/Localization"
-
-# # Install required packages for downloading photoneo (including wget)
-# RUN apt-get update
-# RUN apt-get install -y ca-certificates
-# RUN rm -rf /var/lib/apt/lists/*
-
-# # Download the PhoXiControl
-# RUN wget \
-#      --no-verbose \
-#      --output-document=/tmp/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.tar \
-#      "https://www.photoneo.com/files/dw/dw/pxc/1.2.14/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.tar"
-
-# # Extract the tar.gz archive into /tmp
-# RUN tar --extract \
-#      --file=/tmp/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.tar \
-#      --directory=/tmp
-
-# # Ensure the installer files have execution permissions
-# RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.run
-# # RUN chmod +x /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu16-STABLE.run
-
-# # Install PhoXiControl to the specified directory
-# # RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.26-Ubuntu16-STABLE.run \
-# RUN /tmp/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.run 
-# # \
-#     #  --accept "${PHOXI_CONTROL_PATH}"
-
-# # Clean up afterwards
-# RUN rm -rf /tmp/PhotoneoPhoXiControlInstaller-1.2.14-Ubuntu16-STABLE.run
 
 # Download PhoLocalization
 RUN wget \
@@ -237,14 +198,14 @@ RUN apt-get update && apt-get install -y \
 # 8080 = Tomcat / Guacamole web
 # 4822 = guacd
 # 5432 = PostgreSQL
-# 80   = Nginx (if you choose to run it)
+# 80   = Nginx # Not 100% sure if we need this
 # 5901 = vnc
 # 6901 = noVNC
 
 EXPOSE 8080 4822 5432
 EXPOSE 5901 6901 5000
 
-# Need a newer version of cmake to build the Photoneo code
+# Headache #3: Need a newer version of cmake to build the Photoneo code
 # Install cmake dependencies and clean up
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -261,10 +222,16 @@ RUN wget -qO - https://apt.kitware.com/keys/kitware-archive-latest.asc | apt-key
     apt-get install -y --no-install-recommends cmake && \
     rm -rf /var/lib/apt/lists/*
 
+# Hack to triger rebuild at a specific point without --no-cache
+# Define a build argument for "cache busting"
+ARG CACHE_BUST=1
+# Use the argument in a command. Changing CACHE_BUST invalidates this layer.
+RUN echo "Cache bust value: ${CACHE_BUST}" > /cache_buster.txt
+
 # Set working directory
 WORKDIR /usr/local/src
 
-# Clone your C++ repository
+# Clone the photoneo repository
 RUN git clone https://github.com/sequenceplanner/photoneo_campx.git
 
 # Navigate to the cpp_executables directory
@@ -273,7 +240,7 @@ WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface_redis/cpp_executab
 # Create a 'dev' directory for build artifacts
 RUN mkdir -p dev
 
-# Build all four C++ programs
+# Build all five C++ programs
 RUN cd dev && \
     for proj in Connect ConnectIPv4 Capture Freerun Stop; do \
         echo "Building $proj..." && \
@@ -284,25 +251,12 @@ RUN cd dev && \
         cd ..; \
     done
 
-# (Optional) Verify build artifacts
+# Verify build artifacts this might not even be visible
 RUN ls -al dev/Connect && \
     ls -al dev/ConnectIPv4 && \
     ls -al dev/Capture && \
     ls -al dev/Freerun && \
     ls -al dev/Stop
-
-# --- Additions for Rust phoxi_ci Application ---
-
-# --- DEBUGGING: Verify Rust directory exists after initial clone ---
-    RUN echo "DEBUG: Checking contents of /usr/local/src/photoneo_campx:" && \
-    ls -la /usr/local/src/photoneo_campx/ && \
-    echo "DEBUG: Checking existence of target Rust directory:" && \
-    ls -ld /usr/local/src/photoneo_campx/phoxi_control_interface_redis/ || \
-    echo "DEBUG: Target Rust directory /usr/local/src/photoneo_campx/phoxi_control_interface_redis/ NOT FOUND or ls failed!"
-# --- End Debugging ---
-
-
-# --- Additions for Rust phoxi_ci Application ---
 
 # Install Rust prerequisites
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
@@ -315,27 +269,16 @@ ENV RUSTUP_HOME=/usr/local/rustup \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal \
     && chmod -R a+w $RUSTUP_HOME $CARGO_HOME
 
-# --- Adjust WORKDIR for Rust build ---
-# Change to the correct path for your Rust project INSIDE the ALREADY CLONED repo
+# Change to the correct path for the Rust project INSIDE the ALREADY CLONED repo
 WORKDIR /usr/local/src/photoneo_campx/phoxi_control_interface_redis/
 
-# --- Add this line for debugging ---
-# List the contents of the current directory to ensure Cargo.toml is present
-RUN ls -la
-# --- End debugging line ---
-
-# Add any build dependencies needed by your Rust app here using apt-get if necessary
-# RUN apt-get update && apt-get install -y <rust_build_dependency> && rm -rf /var/lib/apt/lists/*
-
-# Build the Rust application (this now runs in the correct subdirectory)
+# Build the Rust application
 RUN cargo build --release
 
-# Reset WORKDIR back to root or another sensible default if needed
+# Reset WORKDIR back to root
 WORKDIR /
 
-# --- End of Additions for Rust ---
-
-# (Make sure the COPY start.sh and CMD ["/start.sh"] lines are still at the end)
+# Start bash script to launch everything
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
