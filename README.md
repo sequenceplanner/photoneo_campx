@@ -1,7 +1,38 @@
 # The Photoneo control interface
 
+## Network
+The Photoneo camera has been set with a static IP of 192.168.1.27. This is OK with the CampX network,
+but it makes the device undiscoverable on other networks. If for some reason this has to be changed,
+the static IP has to be changed on a Windows computer that has PhoXiControl installed. The static IP is
+necessary for the Docker setup.
+
+## Docker
+In the 'docker' folder, build all the dockes images with:
+```
+sudo docker compose build
+```
+To completely rebuild everything, add the "--no-cache" suffix:
+```
+sudo docker compose build --no-cache
+```
+To manually specify up to which point to cache the previous build, a CACHE_BUST variable was added in the Dockerfile.
+Change its position and value to trigger a rebuild after its position. 
+
+Launch:
+```
+sudo docker compose up
+```
+Stop everything:
+```
+Ctrl+C
+```
+And then to make sure:
+```
+sudo docker compose down
+```
+
 ## Startup PhoXiControl
-The PhoXiControl has to ru in order for the camera to be able to scan. Unfortunately it is not possible only to use API calls to trigger scanning, PhoXiControl has to be running. More information in the manual.
+The PhoXiControl has to run in order for the camera to be able to scan. Unfortunately it is not possible only to use API calls to trigger scanning, PhoXiControl has to be running. More information in the manual.
 1. Make a shared folder.
 ```
 mkdir docker_mount
@@ -20,7 +51,7 @@ where PATH is your path to the shared folder.
 
 3. Start the docker with: 
 ```
-sudo docker-compose up --build
+sudo docker compose up
 ```
 4. Open a web browsed and go to vnc:
 ```
@@ -43,6 +74,26 @@ chalmers_photoneo -> 2019-08-079-LC3
 ```
 volvo_photoneo -> 192.168.1.27
 chalmers_photoneo -> 192.168.1.103
+```
+The device should now be connected as:
+
+`DirectConnection-1708011`
+
+## Controlling the Scanner via the Redis Interface
+We are using the `Conect` program to test the connection. The result should be a Succesfull connection result in the Photoneo RAW output (check in the View State tab in micro_sp_ui). To test this, go to the Set State tab in micro_sp_ui and set the following 5 values:
+```
+photoneo_command_type -> Connect
+photoneo_hardware_identification -> DirectConnection-1708011
+photoneo_ip_identification -> 192.168.1.27
+photoneo_request_state -> initial
+photoneo_request_trigger -> True
+``` 
+And then press Set State.
+
+Going back to the View State tab, the `photoneo_phoxi_raw_info` variable should have the following value:
+
+```
+Connection to the device DirectConnection-1708011 was Succesfull!
 ```
 
 ## Architecture
