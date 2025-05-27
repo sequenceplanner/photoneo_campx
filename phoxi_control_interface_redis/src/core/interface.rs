@@ -10,7 +10,9 @@ use std::sync::mpsc as sync_mpsc;
 use super::state::ScanRequest;
 
 pub async fn photoneo_control_interface(
-    name: String,
+    photoneo_id: &str,
+    phoxi_scans_path: &str,
+    phoxi_interface_path: &str,
     command_sender: mpsc::Sender<StateManagement>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut interval = interval(Duration::from_millis(100));
@@ -25,89 +27,93 @@ pub async fn photoneo_control_interface(
         let state = response_rx.await?;
 
         let mut request_trigger = state.get_bool_or_default_to_false(
-            &format!("{}_control_interface", name),
-            &format!("{}_request_trigger", name),
+            &format!("{}_control_interface", photoneo_id),
+            &format!("{}_request_trigger", photoneo_id),
         );
 
         let mut request_state = state.get_string_or_default_to_unknown(
-            &format!("{}_control_interface", name),
-            &format!("{}_request_state", name),
+            &format!("{}_control_interface", photoneo_id),
+            &format!("{}_request_state", photoneo_id),
         );
 
         if request_trigger {
             request_trigger = false;
             if request_state == ServiceRequestState::Initial.to_string() {
                 let name_identification = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_name_identification", name),
+                    &format!("{}_control_interface", photoneo_id),
+                    &format!("{}_name_identification", photoneo_id),
                 );
 
                 let hardware_identification = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_hardware_identification", name),
+                    &format!("{}_control_interface", photoneo_id),
+                    &format!("{}_hardware_identification", photoneo_id),
                 );
 
                 let ip_identification = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_ip_identification", name),
+                    &format!("{}_control_interface", photoneo_id),
+                    &format!("{}_ip_identification", photoneo_id),
                 );
 
                 let phoxi_raw_info;
 
                 let command_type = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_command_type", name),
+                    &format!("{}_control_interface", photoneo_id),
+                    &format!("{}_command_type", photoneo_id),
                 );
 
                 let scene_name = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_scene_name", name),
+                    &format!("{}_control_interface", photoneo_id),
+                    &format!("{}_scene_name", photoneo_id),
                 );
 
                 let praw = match state.get_bool_or_unknown(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_praw", name),
+                    &format!("{}_control_interface", photoneo_id),
+                    &format!("{}_praw", photoneo_id),
                 ) {
                     BoolOrUnknown::UNKNOWN => true,
                     BoolOrUnknown::Bool(val) => val,
                 };
 
                 let ply = state.get_bool_or_default_to_false(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_ply", name),
+                    &format!("{}_control_interface", photoneo_id),
+                    &format!("{}_ply", photoneo_id),
                 );
 
                 let tif = state.get_bool_or_default_to_false(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_tif", name),
+                    &format!("{}_control_interface", photoneo_id),
+                    &format!("{}_tif", photoneo_id),
                 );
 
-                let praw_dir = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_praw_dir", name),
-                );
+                // let praw_dir = state.get_string_or_default_to_unknown(
+                //     &format!("{}_control_interface", photoneo_id),
+                //     &format!("{}_praw_dir", photoneo_id),
+                // );
 
-                let ply_dir = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_ply_dir", name),
-                );
+                // let ply_dir = state.get_string_or_default_to_unknown(
+                //     &format!("{}_control_interface", photoneo_id),
+                //     &format!("{}_ply_dir", photoneo_id),
+                // );
 
-                let tif_dir = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_tif_dir", name),
-                );
+                // let tif_dir = state.get_string_or_default_to_unknown(
+                //     &format!("{}_control_interface", photoneo_id),
+                //     &format!("{}_tif_dir", photoneo_id),
+                // );
+
+                let praw_dir = format!("{phoxi_scans_path}/praw");
+                let ply_dir = format!("{phoxi_scans_path}/ply");
+                let tif_dir = format!("{phoxi_scans_path}/tif");
 
                 let timeout = match state.get_int_or_unknown(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_timeout", name),
+                    &format!("{}_control_interface", photoneo_id),
+                    &format!("{}_timeout", photoneo_id),
                 ) {
                     IntOrUnknown::UNKNOWN => 5000,
                     IntOrUnknown::Int64(int) => int,
                 };
 
                 let settings = match state.get_string_or_unknown(
-                    &format!("{}_control_interface", name),
-                    &format!("{}_tif_dir", name),
+                    &format!("{}_control_interface", photoneo_id),
+                    &format!("{}_settings", photoneo_id),
                 ) {
                     StringOrUnknown::UNKNOWN => "default".to_string(),
                     StringOrUnknown::String(val) => val,
@@ -129,18 +135,18 @@ pub async fn photoneo_control_interface(
                     settings,
                 };
 
-                match call_blocking_exec(scan_request, &name) {
+                match call_blocking_exec(scan_request, phoxi_interface_path, &photoneo_id) {
                     Ok(val) => {
                         log::info!(target: &&format!(
-                            "{name}_control_interface"),
-                            "Photoneo succeeded."
+                            "phoxi_control_interface"),
+                            "Photoneo request succeeded. Check {photoneo_id}_phoxi_raw_info for feedback from the scanner."
                         );
                         request_state = ServiceRequestState::Succeeded.to_string();
                         phoxi_raw_info = val[0].clone();
                     }
                     Err(e) => {
                         log::error!(target: &&format!(
-                            "{name}_control_interface"),
+                            "phoxi_control_interface"),
                             "Photoneo failed with error: {}.", e
                         );
                         request_state = ServiceRequestState::Failed.to_string();
@@ -150,12 +156,15 @@ pub async fn photoneo_control_interface(
 
                 let new_state = state
                     .update(
-                        &format!("{name}_request_trigger"),
+                        &format!("{photoneo_id}_request_trigger"),
                         request_trigger.to_spvalue(),
                     )
-                    .update(&format!("{name}_request_state"), request_state.to_spvalue())
                     .update(
-                        &format!("{name}_phoxi_raw_info"),
+                        &format!("{photoneo_id}_request_state"),
+                        request_state.to_spvalue(),
+                    )
+                    .update(
+                        &format!("{photoneo_id}_phoxi_raw_info"),
                         phoxi_raw_info.to_spvalue(),
                     );
 
@@ -169,8 +178,12 @@ pub async fn photoneo_control_interface(
     }
 }
 
-fn call_blocking_exec(request: ScanRequest, photoneo_name: &str) -> Result<Vec<String>, io::Error> {
-    let args = prepare_arguments(&request, photoneo_name);
+fn call_blocking_exec(
+    request: ScanRequest,
+    phoxi_interface_path: &str,
+    photoneo_id: &str,
+) -> Result<Vec<String>, io::Error> {
+    let args = prepare_arguments(&request, phoxi_interface_path, photoneo_id);
     let mut child = Command::new(&args[0])
         .args(&args[1..])
         .stdout(Stdio::piped())
@@ -201,38 +214,37 @@ fn call_blocking_exec(request: ScanRequest, photoneo_name: &str) -> Result<Vec<S
     }
 }
 
-fn prepare_arguments(request: &ScanRequest, photoneo_name: &str) -> Vec<String> {
+fn prepare_arguments(
+    request: &ScanRequest,
+    phoxi_interface_path: &str,
+    photoneo_id: &str,
+) -> Vec<String> {
     let capcom = capitalize_first(&request.command_type);
 
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is not set");
     let settings_path = format!(
         "{}/parameters/settings/{}.json",
-        manifest_dir, request.settings
+        phoxi_interface_path, request.settings
     );
-    let parameters_path = format!("{}/parameters/scanners/photoneo_volvo.json", manifest_dir);
+    let parameters_path = format!(
+        "{}/parameters/scanners/{}.json",
+        phoxi_interface_path, photoneo_id
+    );
 
-    let settings = load_json_from_file(&settings_path, photoneo_name).unwrap();
-    let parameters = load_json_from_file(&parameters_path, photoneo_name).unwrap();
+    let settings = load_json_from_file(&settings_path).unwrap();
+    let parameters = load_json_from_file(&parameters_path).unwrap();
 
     let mut args_list: Vec<String> = Vec::new();
 
-    // 0 - executable name
+    // 0 - executable photoneo_id
     args_list.push(format!(
         "{}/cpp_executables/dev/{}/{}_Release",
-        manifest_dir, capcom, capcom
+        phoxi_interface_path, capcom, capcom
     ));
 
     // 1 - scanner hardware identification
-    // args_list.push(
-    //     parameters["hardware_identification"]
-    //         .as_str()
-    //         .unwrap()
-    //         .to_string(),
-    // );
-
     args_list.push(request.hardware_identification.to_string());
 
-    // 2 - scene name
+    // 2 - scene photoneo_id
     args_list.push(request.scene_name.clone());
 
     // 3 - save scan in .praw format
@@ -470,7 +482,7 @@ fn resolution_to_arg(value: &Value) -> String {
     }
 }
 
-fn load_json_from_file(path: &str, photoneo_name: &str) -> Option<Value> {
+fn load_json_from_file(path: &str) -> Option<Value> {
     match File::open(path) {
         Ok(file) => {
             let reader = BufReader::new(file);
@@ -478,7 +490,7 @@ fn load_json_from_file(path: &str, photoneo_name: &str) -> Option<Value> {
                 Ok(json) => Some(json),
                 Err(e) => {
                     log::warn!(target: &&format!(
-                        "{photoneo_name}_control_interface"),
+                        "phoxi_control_interface"),
                         concat!(
                             "Deserialization failed with: '{}'. ",
                             "The JSON file may be malformed or contain ",
@@ -492,7 +504,7 @@ fn load_json_from_file(path: &str, photoneo_name: &str) -> Option<Value> {
         }
         Err(e) => {
             log::warn!(target: &&format!(
-                "{photoneo_name}_control_interface"),
+                "phoxi_control_interface"),
                 concat!(
                     "Opening json file failed with: '{}'. ",
                     "Please check if the file path is correct and ",
