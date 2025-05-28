@@ -1,3 +1,323 @@
 pub mod state;
 // pub mod state_manager;
 pub mod interface;
+
+pub const DEFAULT_SETTINGS_JSON: &str = r#"
+{
+    "capturing_settings": {
+        "shutter_multiplier": {
+            "value": 1,
+            "default": 1,
+            "min": 1,
+            "max": 20,
+            "info": "Shutter Multiplier affects the duration of scanning by changing the number of repetitions of individual patterns. It does not affect the duration of individual sweep of the laser. The final scanning duration is a multiple of the value of the Shutter Multiplier. Higher number of Shutter Multiplier helps to scan darker materials. Setting the value too low could result in underexposed images. Setting the value too high could result in overexposed images."
+        },
+        "scan_multiplier": {
+            "value": 1,
+            "default": 1,
+            "min": 1,
+            "max": 50,
+            "info": "Scan Multiplier allows to scan multiple times and merge the output to a single point cloud. This increases S/N ratio to ensure higher quality scan. It is useful in scenarios with High Dynamic Range, where increased Shutter Multiplier means oversaturation of some areas of the scan. It affects the scanning process and the final duration of the scan is multiplied by Scan Multiplier."
+        },
+        "resolution": {
+            "value": {
+                "width": 2064,
+                "height": 1544
+            },
+            "default": {
+                "width": 2064,
+                "height": 1544
+            },
+            "min": {
+                "width": 1032,
+                "height": 772
+            },
+            "max": {
+                "width": 2064,
+                "height": 1544
+            },
+            "info": "Resolution of the resulting image."
+        },
+        "camera_only_mode": {
+            "value": false,
+            "default": false,
+            "min": false,
+            "max": true,
+            "info": "Specifies a mode, where only the camera captures the frame. With Camera Only Mode, you can use the internal camera of the scanner to capture 2D images of the scene. These images then can be read out as Texture. It is useful to either navigate the scanner around the scene, or to take a quick snapshot to look for changes in scene. It does not perform any computations necessary for 3D Scanning and has low latency. It does not however pfovide any depth info, so it is not very good for positioning the camera. It is better so use the freerun mode in low resolution mode and save the .tif format."
+        },
+        "ambient_light_suppression": {
+            "value": false,
+            "default": false,
+            "min": false,
+            "max": true,
+            "info": "Ambient light suppression changes the acquisition mode to sample the scene multiple times in short intervals, allowing to suppress the effect of ambient illumination. Shutter multiplier has to be greater than 1 and its value has a multiplicative effect on the suppression of the ambient light."
+        },
+        "coding_strategy": {
+            "value": "Interreflections",
+            "default": "Interreflections",
+            "min": "Normal",
+            "max": "Interreflections",
+            "info": "Coding strategy optimized for Interreflections uses advanced digital coding to make diffuse interreflection possible to suppress. For most scenes, strategy optimized for Interreflections provides better output, but in some edge cases of glossy interreflections, Normal could provide more robust results."
+        },
+        "coding_quality": {
+            "value": "High",
+            "default": "High",
+            "min": "Fast",
+            "max": "Ultra",
+            "info": "Values: Fast, High, Ultra. Approach to achieve subpixel accuracy: Fast - without subpixel accuracy. High - sub-pixel accuracy. Ultra - enhanced sub-pixel accuracy. This parameter influences the processing time. Coding quality set to Ultra ensures in many cases best accuracy but fewer measured points."
+        },
+        "texture_source": {
+            "value": "LED",
+            "default": "LED",
+            "min": "LED",
+            "max": "Focus",
+            "info": "Values: LED, Computed, Laser, Focus. Defines the used texture source. LED will capture an additional image with LED flash that offers a speckle-less 2D image. Use this setting to achieve nice colored point cloud. Computed is a texture computed from the structured patterns - no additional image is necessary. Computed texture has lower quality. Laser will trigger an additional image with Laser flash. Use this setting to investigate light conditions in the scene. Focus will set a structured pattern as a texture. This is useful for analyzing problems with signal contrast and the setup of the shutter parameters."
+        },
+        "single_pattern_exposure": {
+            "value": 10.24,
+            "default": 10.24,
+            "min": 10.24,
+            "max": 100.352,
+            "info": "Values: 10.24 / 14.336 / 20.48 / 24.576 / 30.72 / 34.816 / 40.96 / 49.152 / 75.776 / 79.872 / 90.112 / 100.352. Single Pattern Exposure is the duration of projection of one pattern. This value is in milliseconds. Higher value slows down the movement of the mirror in the projection unit, thus pattern is projected longer.Setting this value higher may be useful when scanning dark or very shiny objects, or when there is another source of strong light and the projected pattern might not be easily visible."
+        },
+        "maximum_fps": {
+            "value": 0.0,
+            "default": 0.0,
+            "min": 0.0,
+            "max": 100.0,
+            "info": "Useful for limiting the fps in freerun mode. If you want to allow a scan every 10 seconds, you can set Maximum FPS to 0.1. If you want 2 scans per second, set the value to 2.0."
+        },
+        "laser_power": {
+            "value": 4095,
+            "default": 4095,
+            "min": 0,
+            "max": 4095,
+            "info": "Recommended to decrease only when experiencing overexposure."
+        },
+        "projection_offset_left": {
+            "value": 0,
+            "default": 0,
+            "min": 0,
+            "max": 5012,
+            "info": "It determines the number of projection columns that are cut off from left side of the projection. The total width of the projection is 512 columns."
+        },
+        "projection_offset_right": {
+            "value": 0,
+            "default": 0,
+            "min": 0,
+            "max": 5012,
+            "info": "It determines the number of projection columns that are cut off from right side of the projection. The total width of the projection is 512 columns."
+        },
+        "led_power": {
+            "value": 4095,
+            "default": 4095,
+            "min": 0,
+            "max": 4095,
+            "info": "Recommended to decrease only when experiencing overexposure."
+        }
+    },
+    "processing_settings": {
+        "max_inaccuracy": {
+            "value": 2.0,
+            "default": 2.0,
+            "min": 0.0,
+            "max": 100.0,
+            "info": "Controls the amount of output points based on point reliability. This enables the user to set preference based on the application. Some applications require a more complete output at the expense of lower precision. Other applications are meant to work with precise data only and need to filter out regions where the precision does not meet a certain threshold."
+        },
+        "surface_smoothness": {
+            "value": "Normal",
+            "default": "Normal",
+            "min": "Sharp",
+            "max": "Smooth",
+            "info": "Values: Normal, Sharp, Smooth. Defines the setting of smoothness of point cloud generation algorithm. Sharp - optimized for small feature retrieval. Higher noise on surfaces. Normal - standard sensor setting best for most scans. Smooth - edge preserving algorithm that smooths the surface, lowering down noise for expense for small features."
+        },
+        "normals_estimation_radius": {
+            "value": 2,
+            "default": 2,
+            "min": 1,
+            "max": 4,
+            "info": "Defines size of the area (in pixels) around a point. Pixels in this area take part in computation of the normal of this point."
+        },
+        "interreflections_filter": {
+            "value": false,
+            "default": false,
+            "min": false,
+            "max": true,
+            "info": "Enables automatic interreflections filtering. Turning this setting will change Coding Strategy to Interreflections."
+        }
+    },
+    "experimental_settings": {
+        "ambient_light_suppression_compatibility_mode": {
+            "value": false,
+            "default": false,
+            "min": false,
+            "max": true,
+            "info": "Ambient light suppression samples the scene multiple times during one pattern exposure. These multiple samples are then used to suppress the effect of ambient illumination by eliminating most of the shot noise caused by longer exposure of ambient light. Enabling the mode will set Shutter Multiplier to fixed value of 2."
+        },
+        "pattern_decomposition_reach": {
+            "value": "Local",
+            "default": "Small",
+            "min": "Local",
+            "max": "Large",
+            "info": "Values: Local, Small, Medium, Large. Pattern Decomposition Reach defines the radius around the pixel which is used during decoding process of the scanner patterns. Bigger area is slower for computation, but provides error correction for challenging objects (like shiny parts, etc). The parameter does not smooth the output. Alongside the error correction, it can detect incorrectly measured points and filter them out."
+        },
+        "signal_contrast_threshold": {
+            "value": 0.032,
+            "default": 0.005,
+            "min": 0.0,
+            "max": 4095.0,
+            "info": "Represents per pixel threshold for the pattern contrast. To have an intuition, you can switch texture source to Focus and look into the image. The difference of intensity values between white and black stripes is considered a contrast. Lower contrast could be caused by multiple reasons, such as inter-reflections, dark albedo materials or low shutter settings."
+        },
+        "use_extended_logging": {
+            "value": false,
+            "default": false,
+            "min": false,
+            "max": true,
+            "info": "Determines whether extended logging is enabled in PhoXi Control. Please use this option only when Photoneo employee asks you to. When enabled, much more data is being logged on scanner and it can lead to scanner being full. You need to restart the scanner after changing this setting."
+        }
+    },
+    "calibration_settings": {
+        "unimplemented": true,
+        "comment": "Probably no need to change these settings."
+    },
+    "coordinates_settings": {
+        "unimplemented": true,
+        "comment": "Probably no need to change these settings."
+    },
+    "output_settings": {
+        "send_confidence_map": false,
+        "send_depth_map": true,
+        "send_normal_map": true,
+        "send_point_cloud": true,
+        "send_texture": true
+    },
+    "localization_settings": {
+        "timeout_criterion": {
+            "value": 10000,
+            "default": 0,
+            "min": 1,
+            "max": 0,
+            "info": "0 - infinity. Milliseconds.Stop localization if this timeout is reached."
+        },
+        "number_of_results_criterion": {
+            "value": 1,
+            "default": 1,
+            "min": 1,
+            "max": 999,
+            "info": "Stop localization if this number of results is found."
+        },
+        "scene_noise_reduction": {
+            "value": true,
+            "default": true,
+            "min": false,
+            "max": true,
+            "info": "It is recommended to keep this option selected at all times. This option makes segments more continuous. You may consider turning it off when the Scene Clustering Level is set to Very High and sufficient clustering is not obtained."
+        },
+        "smart_memory": {
+            "value": false,
+            "default": false,
+            "min": false,
+            "max": true,
+            "info": "With Smart Memory setting, localization results from the previous localization run are loaded again. It is especially useful in situations where the scene doesn't change significantly. This setting may speed up consequent localization runs."
+        },
+        "scene_clustering_level": {
+            "value": "Normal",
+            "default": "Normal",
+            "min": "Low",
+            "max": "Very high",
+            "info": "Values: Low, Normal, High, Very high. 'Higher' values mean that more segments will be created. It is recommended to use a value which will divide two separate parts into two different segments and at the same time prevent the creation of too many small segments on flat areas. The default parameter is 'Normal'"
+        },
+        "scene_minimal_cluster_size": {
+            "value": 200,
+            "default": 200,
+            "min": 0,
+            "max": 9999999,
+            "info": "The lowest number of points in a segment. Segments with a lower number of points are filtered out and not considered for the matching algorithm. Ideally, the noise should be filtered out, but all relevant parts of the scene should be kept."
+        },
+        "scene_maximal_cluster_size": {
+            "value": 3500000,
+            "default": 350000,
+            "min": 0,
+            "max": 9999999,
+            "info": "The maximal number of points in a segment. Segments with a higher number of points are filtered out and are not considered for the matching algorithm. Useful for foltering out very large segments in the background of the scene. Segments which are significantly larger than the model will be automatically omitted - this cannot be adjusted by any parameter."
+        },
+        "matching_algorithm": {
+            "value": "Surfaces",
+            "default": "Surfaces",
+            "min": "Edges",
+            "max": "Surfaces",
+            "info": "Values: Edges, Surfaces, Combined. Matching algorithm us looking for corresponding points between model of object and scene. The segmentation classifies all model and scene points into surface (if inside segment) and edge points, and this setting from where the points are taken. Surfaces (default) - for well-shaped objects with smoothly curved surfaces, like a ball or an ovaloid. Edges - suitable for models mostly defined by edges(e.g. boxes). Combined - for planar objects with sharp edges (not rounded)."
+        },
+        "model_keypoints_sampling": {
+            "value": "Medium",
+            "default": "Medium",
+            "min": "Sparse",
+            "max": "Dense",
+            "info": "Values: Sparse, Medium, Dense. Adjust the density of model subsampling. Higher densities mean more points and more extensive computations. This is especially true with the Surfaces matching algorithm. For the Combined matching algorithm, the Dense option might provide better results as it is not resource demanding. This setting also sets the threshold for the permitted distance of the scene point from the model when calculating Overlap and Fine Alignment. Dense sampling lowers the threshold, while Sparse samlping loosens it."
+        },
+        "local_search_radius": {
+            "value": "Normal",
+            "default": "Normal",
+            "min": "Short",
+            "max": "Medium",
+            "info": "Values: Short, Normal, Medium. The matching algorithm works on searching around numerous key points in the scene. This parameter sets the radius for searching. For specific situations, it might speed up or slow down the localization, bit it should not have a significant effect on the success rate of localization. Smaller radius can be especially helpful when the object is large in relation to the scan (when the object covers almost the entire scene)."
+        },
+        "feature_fit_consideration_level": {
+            "value": 15,
+            "default": 15,
+            "min": 0,
+            "max": 99,
+            "info": "Defines the percentage of the segment size which needs to be alignedwith the model for this segment to be considered as part of the object. The remaining part of the segment is considered to overflow the object. The size of the overflow can be limited with the Global Maximal Feature Fit Overflow setting. It is not advised to alter the value of this parameter."
+        },
+        "global_maximal_feature_fit_overflow": {
+            "value": 20,
+            "default": 20,
+            "min": 0,
+            "max": 99,
+            "info": "Given all those scene segments that are part of the localized object, we calculate the number of points of these segments that are not alogned with the model of object (i.e., segment points that are overflowing the model). If percentage of these points with respect to all points of all considered segments is greater than this setting, the pose will be rejected."
+        },
+        "fine_alignment_iterations": {
+            "value": 30,
+            "default": 30,
+            "min": 0,
+            "max": 999,
+            "info": "This refers to iterative closest point (ICP) algorithm implementation which refines the object's pose in the scene. A number of iterations of the algorithm. The recommended range is between 6 - 30. Higher values might slow down the localization performance, but smaller numbers may not be sufficient for convergence."
+        },
+        "fine_alignment_point_set": {
+            "value": "Surface",
+            "deafult": "Surface",
+            "min": "Surface",
+            "max": "Edges",
+            "info": "Values: Surface, Edges. This refers to iterative closest point (ICP) algorithm implementation which refines the object's pose in the scene. This defines which points from model and scene will be used in the algorithm. Surface points - default. ICP algorithm will use only those points that are not on the edges. Edge points - useful for objects which are completely described by their edges only (boxes, etc.)."
+        },
+        "fine_alignment_point_set_sampling": {
+            "value": "Sampled",
+            "default": "Sampled",
+            "min": "Sampled",
+            "max": "Complete",
+            "info": "Values: Sampled, Complete. This refers to iterative closest point (ICP) algorithm implementation which refines the object's pose in the scene. This defines if the whole or only subsampled scene and model point clouds will be used in the algorithm. Sampled - default. Complete - this setting will slow down the performance signifficantly, but in some cases it can lead to more precide alignment."
+        },
+        "projection_tolerance": {
+            "value": 100,
+            "default": 100,
+            "min": 0,
+            "max": 100,
+            "info": "Maximum permitted percentage of points in the expected point cloud which are closer to the camera than the actual scanned points. this is not expected to occur, if the correct position of the object has been detected. We should see the object, but we actually see points behind it. Setting a lower percentage may help in finding the correct orientation of the object."
+        },
+        "projection_hidden_part_tolerance": {
+            "value": 100,
+            "default": 100,
+            "min": 0,
+            "max": 100,
+            "info": "Maximum permitted percentage of points in the expected point cloud which are further to the camera than the actual scanned points. This could occur, but it would mean that the real object is iccluded by something else. Setting a lower percentage will remove occluded objects and the most upper ones will remain."
+        },
+        "overlap": {
+            "value": 15.0,
+            "default": 15.0,
+            "min": 0.0,
+            "max": 100.0,
+            "info": "When the object is found at a specific position, it is possible to calculate what its point cloud should look like. Comparing this expected point cloud with the actually captured point cloud can filter out undesirable matches. This setting defines the percentage of visible surface which needs to be aligned with points in the expected point cloud (sampled point cloud of used CAD model)."
+        }
+    }
+}
+"#;

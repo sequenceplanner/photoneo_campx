@@ -189,27 +189,49 @@ fn call_blocking_exec(
         .stdout(Stdio::piped())
         .spawn()?;
 
-    let stdout = child.stdout.take().expect("Failed to capture stdout");
-    let reader = BufReader::new(stdout);
+    match child.stdout.take() {
+        Some(stdout) => {
+            let reader = BufReader::new(stdout);
 
-    let (tx, rx) = sync_mpsc::channel();
+            let (tx, rx) = sync_mpsc::channel();
 
-    thread::spawn(move || {
-        let lines: Vec<String> = reader
-            .lines()
-            .map(|line| line.unwrap_or_else(|_| "".to_string()))
-            .collect();
-        tx.send(lines).unwrap();
-    });
+            thread::spawn(move || {
+                let lines: Vec<String> = reader
+                    .lines()
+                    .map(|line| line.unwrap_or_else(|_| "".to_string()))
+                    .collect();
+                if let Err(e) = tx.send(lines) {
+                    log::warn!(
+                        target: "phoxi_control_interface",
+                        "Failed to send captured stdout lines to main thread (receiver dropped) with : {}",
+                        e
+                    );
+                }
+            });
 
-    let timeout_duration = Duration::from_millis(request.timeout as u64);
+            let timeout_duration = Duration::from_millis(request.timeout as u64);
 
-    match rx.recv_timeout(timeout_duration) {
-        Ok(output_lines) => Ok(output_lines),
-        Err(_) => {
-            child.kill()?;
-            let _ = child.wait(); // Clean up the process if it's still running
-            Ok(vec!["Timeout Expired".to_string()])
+            match rx.recv_timeout(timeout_duration) {
+                Ok(output_lines) => Ok(output_lines),
+                Err(_) => {
+                    child.kill()?;
+                    let _ = child.wait();
+                    Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "Command execution timed out.",
+                    ))
+                }
+            }
+        }
+        None => {
+            log::error!(target: &&format!(
+                "phoxi_control_interface"),
+                "Failed to capture stdout."
+            );
+            Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "Failed to capture stdout.",
+            ))
         }
     }
 }
@@ -230,8 +252,30 @@ fn prepare_arguments(
         phoxi_interface_path, photoneo_id
     );
 
-    let settings = load_json_from_file(&settings_path).unwrap();
-    let parameters = load_json_from_file(&parameters_path).unwrap();
+    let settings: Value = load_json_from_file(&settings_path).unwrap_or_else(|| {
+        log::warn!(
+            "Failed to load settings from {}. Using built-in default settings.",
+            settings_path
+        );
+        serde_json::from_str(crate::core::DEFAULT_SETTINGS_JSON).unwrap_or_else(|parse_err| {
+            log::error!(
+                "CRITICAL: Failed to parse built-in default settings JSON: {}. 
+                        This indicates a bug in the default JSON string. 
+                        Using Value::Null as ultimate fallback.",
+                parse_err
+            );
+            Value::Null
+        })
+    });
+
+    // For parameters, you'd have similar logic or a different default/handling:
+    let parameters: Value = load_json_from_file(&parameters_path).unwrap_or_else(|| {
+        log::warn!(
+            "Failed to load parameters from {}. Using null as default.",
+            parameters_path,
+        );
+        Value::Null
+    });
 
     let mut args_list: Vec<String> = Vec::new();
 
@@ -260,7 +304,7 @@ fn prepare_arguments(
     args_list.push(
         settings["capturing_settings"]["shutter_multiplier"]["value"]
             .as_i64()
-            .unwrap()
+            .unwrap_or(1)
             .to_string(),
     );
 
@@ -268,16 +312,16 @@ fn prepare_arguments(
     args_list.push(
         settings["capturing_settings"]["scan_multiplier"]["value"]
             .as_i64()
-            .unwrap()
+            .unwrap_or(1)
             .to_string(),
     );
 
     // 8 - capturing_settings::resolution
     if parameters["name_identification"]
         .as_str()
-        .unwrap()
+        .unwrap_or("photoneo_1708011")
         .to_string()
-        == "photoneo_volvo"
+        == "photoneo_1708011"
     {
         args_list.push(resolution_to_arg(
             &settings["capturing_settings"]["resolution"]["min"],
@@ -292,21 +336,21 @@ fn prepare_arguments(
     args_list.push(bool_to_arg(
         settings["capturing_settings"]["camera_only_mode"]["value"]
             .as_bool()
-            .unwrap(),
+            .unwrap_or(false),
     ));
 
     // 10 - capturing_settings::ambient_light_suppression
     args_list.push(bool_to_arg(
         settings["capturing_settings"]["ambient_light_suppression"]["value"]
             .as_bool()
-            .unwrap(),
+            .unwrap_or(false),
     ));
 
     // 11 - capturing_settings::coding_strategy
     args_list.push(
         settings["capturing_settings"]["coding_strategy"]["value"]
             .as_str()
-            .unwrap()
+            .unwrap_or("Interreflections")
             .to_string(),
     );
 
@@ -314,7 +358,7 @@ fn prepare_arguments(
     args_list.push(
         settings["capturing_settings"]["coding_quality"]["value"]
             .as_str()
-            .unwrap()
+            .unwrap_or("High")
             .to_string(),
     );
 
@@ -322,7 +366,7 @@ fn prepare_arguments(
     args_list.push(
         settings["capturing_settings"]["texture_source"]["value"]
             .as_str()
-            .unwrap()
+            .unwrap_or("LED")
             .to_string(),
     );
 
@@ -330,7 +374,7 @@ fn prepare_arguments(
     args_list.push(
         settings["capturing_settings"]["single_pattern_exposure"]["value"]
             .as_f64()
-            .unwrap()
+            .unwrap_or(10.24)
             .to_string(),
     );
 
@@ -338,7 +382,7 @@ fn prepare_arguments(
     args_list.push(
         settings["capturing_settings"]["maximum_fps"]["value"]
             .as_f64()
-            .unwrap()
+            .unwrap_or(0.0)
             .to_string(),
     );
 
@@ -346,7 +390,7 @@ fn prepare_arguments(
     args_list.push(
         settings["capturing_settings"]["laser_power"]["value"]
             .as_i64()
-            .unwrap()
+            .unwrap_or(4095)
             .to_string(),
     );
 
@@ -354,7 +398,7 @@ fn prepare_arguments(
     args_list.push(
         settings["capturing_settings"]["projection_offset_left"]["value"]
             .as_i64()
-            .unwrap()
+            .unwrap_or(0)
             .to_string(),
     );
 
@@ -362,7 +406,7 @@ fn prepare_arguments(
     args_list.push(
         settings["capturing_settings"]["projection_offset_right"]["value"]
             .as_i64()
-            .unwrap()
+            .unwrap_or(0)
             .to_string(),
     );
 
@@ -370,7 +414,7 @@ fn prepare_arguments(
     args_list.push(
         settings["capturing_settings"]["led_power"]["value"]
             .as_i64()
-            .unwrap()
+            .unwrap_or(4095)
             .to_string(),
     );
 
@@ -378,7 +422,7 @@ fn prepare_arguments(
     args_list.push(
         settings["processing_settings"]["max_inaccuracy"]["value"]
             .as_f64()
-            .unwrap()
+            .unwrap_or(2.0)
             .to_string(),
     );
 
@@ -386,7 +430,7 @@ fn prepare_arguments(
     args_list.push(
         settings["processing_settings"]["surface_smoothness"]["value"]
             .as_str()
-            .unwrap()
+            .unwrap_or("Normal")
             .to_string(),
     );
 
@@ -394,7 +438,7 @@ fn prepare_arguments(
     args_list.push(
         settings["processing_settings"]["normals_estimation_radius"]["value"]
             .as_i64()
-            .unwrap()
+            .unwrap_or(2)
             .to_string(),
     );
 
@@ -402,21 +446,21 @@ fn prepare_arguments(
     args_list.push(bool_to_arg(
         settings["processing_settings"]["interreflections_filter"]["value"]
             .as_bool()
-            .unwrap(),
+            .unwrap_or(false),
     ));
 
     // 24 - experimental_settings::ambient_light_suppression_compatibility_mode
     args_list.push(bool_to_arg(
         settings["experimental_settings"]["ambient_light_suppression_compatibility_mode"]["value"]
             .as_bool()
-            .unwrap(),
+            .unwrap_or(false),
     ));
 
     // 25 - experimental_settings::pattern_decomposition_reach
     args_list.push(
         settings["experimental_settings"]["pattern_decomposition_reach"]["value"]
             .as_str()
-            .unwrap()
+            .unwrap_or("Local")
             .to_string(),
     );
 
@@ -424,7 +468,7 @@ fn prepare_arguments(
     args_list.push(
         settings["experimental_settings"]["signal_contrast_threshold"]["value"]
             .as_f64()
-            .unwrap()
+            .unwrap_or(0.032)
             .to_string(),
     );
 
@@ -432,7 +476,7 @@ fn prepare_arguments(
     args_list.push(bool_to_arg(
         settings["experimental_settings"]["use_extended_logging"]["value"]
             .as_bool()
-            .unwrap(),
+            .unwrap_or(false),
     ));
 
     // 28 - Where to save the praw files
@@ -448,7 +492,7 @@ fn prepare_arguments(
     args_list.push(
         parameters["ip_identification"]
             .as_str()
-            .unwrap()
+            .unwrap_or("192.168.1.27")
             .to_string(),
     );
 
@@ -478,7 +522,15 @@ fn resolution_to_arg(value: &Value) -> String {
     } else if value["width"] == 1032 && value["height"] == 772 {
         "1".to_string()
     } else {
-        panic!("Unsupported Photoneo resolution")
+        log::error!(target: &&format!(
+            "phoxi_control_interface"),
+            "Unsupported Photoneo resolution."
+        );
+        log::error!(target: &&format!(
+            "phoxi_control_interface"),
+            "Resolution defaulting to 2064x1544."
+        );
+        "0".to_string()
     }
 }
 

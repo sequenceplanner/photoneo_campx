@@ -56,12 +56,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (tx, rx) = mpsc::channel(32);
     let state_clone = state.clone();
-    tokio::task::spawn(async move { redis_state_manager(rx, state_clone).await.unwrap() });
 
     tokio::task::spawn(async move {
-        photoneo_control_interface(&photoneo_id, &phoxi_scans_path, &phoxi_interface_path, tx)
+        match redis_state_manager(rx, state_clone).await {
+            Ok(()) => (),
+            Err(e) => log::error!(target: &&format!("phoxi_control_interface"), "{}", e),
+        }
+    });
+
+    tokio::task::spawn(async move {
+        match photoneo_control_interface(&photoneo_id, &phoxi_scans_path, &phoxi_interface_path, tx)
             .await
-            .expect("Error")
+        {
+            Ok(()) => (),
+            Err(e) => log::error!(target: &&format!("phoxi_control_interface"), "{}", e),
+        }
     });
 
     loop {
