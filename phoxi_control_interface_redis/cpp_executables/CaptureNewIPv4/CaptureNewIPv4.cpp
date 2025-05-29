@@ -103,7 +103,7 @@ void CaptureNewIPv4::ConnectPhoXiDeviceBySerial(int argc, char *argv[])
     }
 }
 
-void ConnectIPv4::ConnectPhoXiDeviceByIPAddress(int argc, char* argv[])
+void CaptureNewIPv4::ConnectPhoXiDeviceByIPAddress(int argc, char* argv[])
 {
     std::string deviceType;
     using PhoXiDeviceType = pho::api::PhoXiDeviceType;
