@@ -61,9 +61,7 @@ private:
     // std::string PlysOutputFolder = "C:\\Users\\photoneo\\Desktop\\scans\\plys";
     // std::string TifsOutputFolder = "C:\\Users\\photoneo\\Desktop\\scans\\tifs";
 
-    std::string PrawsOutputFolder = argv[28];
-    std::string PlysOutputFolder = argv[29];
-    std::string TifsOutputFolder = argv[30];
+
 
     void ConnectPhoXiDeviceBySerial(int argc, char *argv[]);
     void ChangeSettings(int argc, char* argv[]);
@@ -207,6 +205,7 @@ void Capture::CaptureAndSaveFrame(int argc, char *argv[])
 
     if (std::stoi(argv[3]) == 1)
     {
+        std::string PrawsOutputFolder = argv[28];
         const auto prawsOutputFolder = PrawsOutputFolder.empty() ? std::string() : PrawsOutputFolder + DELIMITER;
         const auto lastFramePraw = prawsOutputFolder + argv[2] + ".praw";
         if (PhoXiDevice->SaveLastOutput(lastFramePraw))
@@ -221,6 +220,7 @@ void Capture::CaptureAndSaveFrame(int argc, char *argv[])
 
     if (std::stoi(argv[4]) == 1)
     {
+        std::string PlysOutputFolder = argv[29];
         const auto plysOutputFolder = PlysOutputFolder.empty() ? std::string() : PlysOutputFolder + DELIMITER;
         const auto lastFramePly = plysOutputFolder + argv[2] + ".ply";
         std::cout << "Saving frame as ply'" << std::endl;
@@ -236,6 +236,7 @@ void Capture::CaptureAndSaveFrame(int argc, char *argv[])
     
     if (std::stoi(argv[5]) == 1)
     {
+        std::string TifsOutputFolder = argv[30];
         const auto tifsOutputFolder = TifsOutputFolder.empty() ? std::string() : TifsOutputFolder + DELIMITER;
         const auto lastFrameTif = tifsOutputFolder + argv[2] + ".tif";
         if (PhoXiDevice->SaveLastOutput(lastFrameTif))
