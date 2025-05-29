@@ -54,7 +54,7 @@
 // 30 - tif_dir (string path)
 // 31 - ip_identification (string, e.g., "192.168.1.27")
 
-class CaptureNew
+class Capture
 {
   private:
     pho::api::PhoXiFactory Factory;
@@ -63,40 +63,23 @@ class CaptureNew
 
     void ConnectPhoXiDeviceBySerial(int argc, char *argv[]);
     void ChangeSettings(int argc, char *argv[]);
-    void CaptureNewAndSaveFrame(int argc, char *argv[]);
-
-    // ReadLine template and string specialization (not used in current flow but kept for potential future use)
-    template <class T>
-    bool ReadLine(T &Output) const
-    {
-        std::string Input;
-        std::getline(std::cin, Input);
-        std::stringstream InputSteam(Input);
-        return (InputSteam >> Output) ? true : false;
-    }
-    bool ReadLine(std::string &Output) const
-    {
-        std::getline(std::cin, Output);
-        return true;
-    }
+    void CaptureAndSaveFrame(int argc, char *argv[]);
 
   public:
-    CaptureNew(){};
-    ~CaptureNew() {
-        // Ensure device is disconnected if object is destroyed
-        // This acts as a fallback if Run() doesn't complete its cleanup
+    Capture(){};
+    ~Capture() {
         if (PhoXiDevice && PhoXiDevice->isConnected()) {
             std::cout << "Capture object destructor: Disconnecting device." << std::endl;
             if (PhoXiDevice->isAcquiring()) {
                 PhoXiDevice->StopAcquisition();
             }
-            PhoXiDevice->Disconnect(true); // Logout
+            PhoXiDevice->Disconnect(true); 
         }
     };
     void Run(int argc, char *argv[]);
 };
 
-void CaptureNew::ConnectPhoXiDeviceBySerial(int argc, char *argv[])
+void Capture::ConnectPhoXiDeviceBySerial(int argc, char *argv[])
 {
     while (!Factory.isPhoXiControlRunning())
     {
@@ -118,16 +101,14 @@ void CaptureNew::ConnectPhoXiDeviceBySerial(int argc, char *argv[])
     }
     else
     {
-        // The Factory.CreateAndConnect might return nullptr without setting a last error message on a PhoXiDevice object
-        // It's better to throw a generic error or check Factory's error state if available
         std::cerr << "Connection to the device " << hardware_identification << " was Unsuccessful (PhoXiDevice is null)!" << std::endl;
         throw std::runtime_error("Failed to connect to device: " + hardware_identification + ". Factory.CreateAndConnect returned null.");
     }
 }
 
-void CaptureNew::ChangeSettings(int argc, char *argv[])
+void Capture::ChangeSettings(int argc, char *argv[])
 {
-    if (!PhoXiDevice || !PhoXiDevice->isConnected()) // Check PhoXiDevice first
+    if (!PhoXiDevice || !PhoXiDevice->isConnected()) 
     {
         std::cerr << "Device not connected. Cannot change settings." << std::endl;
         throw std::runtime_error("Device not connected during ChangeSettings.");
@@ -135,121 +116,146 @@ void CaptureNew::ChangeSettings(int argc, char *argv[])
     std::cout << "Changing settings..." << std::endl;
 
     // Capturing Settings
-    if (PhoXiDevice->CapturingSettings.isEnabled() && PhoXiDevice->CapturingSettings.CanSet())
+    // The FullAPIExample checks IsEnabled, CanSet, CanGet for the *entire* CapturingSettings group
+    if (!PhoXiDevice->CapturingSettings.isEnabled() 
+        || !PhoXiDevice->CapturingSettings.CanSet() 
+        || !PhoXiDevice->CapturingSettings.CanGet())
     {
-        pho::api::PhoXiCapturingSettings newCapturingSettings = PhoXiDevice->CapturingSettings;
+        std::cerr << "Warning: CapturingSettings group is not fully enabled or accessible. Attempting to set anyway." << std::endl;
+        // Or throw: throw std::runtime_error("CapturingSettings group not fully accessible.");
+    }
+    
+    pho::api::PhoXiCapturingSettings newCapturingSettings = PhoXiDevice->CapturingSettings;
+    if (!PhoXiDevice->CapturingSettings.isLastOperationSuccessful()) { // Check after getting current settings
+        throw std::runtime_error("Failed to get current CapturingSettings: " + std::string(PhoXiDevice->CapturingSettings.GetLastErrorMessage().c_str()));
+    }
 
-        newCapturingSettings.ShutterMultiplier = std::stoi(argv[6]);
-        newCapturingSettings.ScanMultiplier = std::stoi(argv[7]);
 
-        if (PhoXiDevice->SupportedCapturingModes.isEnabled() && PhoXiDevice->SupportedCapturingModes.CanGet())
+    newCapturingSettings.ShutterMultiplier = std::stoi(argv[6]);
+    newCapturingSettings.ScanMultiplier = std::stoi(argv[7]);
+
+    // Resolution setting (CapturingMode) is handled separately as it's not part of PhoXiCapturingSettings struct
+    if (PhoXiDevice->SupportedCapturingModes.isEnabled() && PhoXiDevice->SupportedCapturingModes.CanGet() &&
+        PhoXiDevice->CapturingMode.isEnabled() && PhoXiDevice->CapturingMode.CanSet())
+    {
+        std::vector<pho::api::PhoXiCapturingMode> SupportedCapturingModes = PhoXiDevice->SupportedCapturingModes;
+        if (!PhoXiDevice->SupportedCapturingModes.isLastOperationSuccessful())
         {
-            std::vector<pho::api::PhoXiCapturingMode> SupportedCapturingModes = PhoXiDevice->SupportedCapturingModes;
-            if (!PhoXiDevice->SupportedCapturingModes.isLastOperationSuccessful())
+            throw std::runtime_error("Failed to get SupportedCapturingModes: " + std::string(PhoXiDevice->SupportedCapturingModes.GetLastErrorMessage().c_str()));
+        }
+        int resolutionIndex = std::stoi(argv[8]);
+        if (resolutionIndex >= 0 && static_cast<size_t>(resolutionIndex) < SupportedCapturingModes.size())
+        {
+            PhoXiDevice->CapturingMode = SupportedCapturingModes[resolutionIndex];
+            if (!PhoXiDevice->CapturingMode.isLastOperationSuccessful())
             {
-                throw std::runtime_error("Failed to get SupportedCapturingModes: " + std::string(PhoXiDevice->SupportedCapturingModes.GetLastErrorMessage().c_str()));
-            }
-            int resolutionIndex = std::stoi(argv[8]);
-            if (resolutionIndex >= 0 && static_cast<size_t>(resolutionIndex) < SupportedCapturingModes.size())
-            {
-                PhoXiDevice->CapturingMode = SupportedCapturingModes[resolutionIndex];
-                if (!PhoXiDevice->CapturingMode.isLastOperationSuccessful())
-                {
-                    throw std::runtime_error("Failed to set CapturingMode: " + std::string(PhoXiDevice->CapturingMode.GetLastErrorMessage().c_str()));
-                }
-            }
-            else
-            {
-                std::cerr << "Warning: Invalid resolution index: " << resolutionIndex << ". Max index: " << (SupportedCapturingModes.empty() ? -1 : static_cast<int>(SupportedCapturingModes.size()) -1) << ". Using current resolution." << std::endl;
+                throw std::runtime_error("Failed to set CapturingMode: " + std::string(PhoXiDevice->CapturingMode.GetLastErrorMessage().c_str()));
             }
         }
         else
         {
-            std::cerr << "Warning: Cannot get SupportedCapturingModes or feature not enabled. Resolution change skipped." << std::endl;
-        }
-
-        newCapturingSettings.CameraOnlyMode = static_cast<bool>(std::stoi(argv[9]));
-        newCapturingSettings.AmbientLightSuppression = static_cast<bool>(std::stoi(argv[10]));
-        newCapturingSettings.CodingStrategy = argv[11];
-        newCapturingSettings.CodingQuality = argv[12];
-        newCapturingSettings.TextureSource = argv[13];
-        newCapturingSettings.SinglePatternExposure = std::stod(argv[14]);
-        newCapturingSettings.MaximumFPS = std::stod(argv[15]);
-        newCapturingSettings.LaserPower = std::stoi(argv[16]);
-        
-        // For these, check if the feature name is correct as per API docs for your device model/firmware
-        if(PhoXiDevice->Features.IsSupported("CapturingSettings.ProjectionOffsetLeft")) newCapturingSettings.ProjectionOffsetLeft = std::stoi(argv[17]);
-        else std::cerr << "Warning: CapturingSettings.ProjectionOffsetLeft not supported or name incorrect." << std::endl;
-        if(PhoXiDevice->Features.IsSupported("CapturingSettings.ProjectionOffsetRight")) newCapturingSettings.ProjectionOffsetRight = std::stoi(argv[18]);
-        else std::cerr << "Warning: CapturingSettings.ProjectionOffsetRight not supported or name incorrect." << std::endl;
-        if(PhoXiDevice->Features.IsSupported("CapturingSettings.LedPower")) newCapturingSettings.LedPower = std::stoi(argv[19]);
-        else std::cerr << "Warning: CapturingSettings.LedPower not supported or name incorrect." << std::endl;
-
-        PhoXiDevice->CapturingSettings = newCapturingSettings;
-        if (!PhoXiDevice->CapturingSettings.isLastOperationSuccessful())
-        {
-            throw std::runtime_error("Failed to set CapturingSettings: " + std::string(PhoXiDevice->CapturingSettings.GetLastErrorMessage().c_str()));
+            std::cerr << "Warning: Invalid resolution index: " << resolutionIndex << ". Max index: " << (SupportedCapturingModes.empty() ? -1 : static_cast<int>(SupportedCapturingModes.size()) -1) << ". Using current resolution." << std::endl;
         }
     }
     else
     {
-        std::cerr << "Warning: CapturingSettings are not enabled or cannot be set." << std::endl;
+        std::cerr << "Warning: Cannot get/set SupportedCapturingModes or CapturingMode feature. Resolution change skipped." << std::endl;
     }
+
+    newCapturingSettings.CameraOnlyMode = static_cast<bool>(std::stoi(argv[9]));
+    newCapturingSettings.AmbientLightSuppression = static_cast<bool>(std::stoi(argv[10]));
+    newCapturingSettings.CodingStrategy = argv[11];
+    newCapturingSettings.CodingQuality = argv[12];
+    newCapturingSettings.TextureSource = argv[13];
+    newCapturingSettings.SinglePatternExposure = std::stod(argv[14]);
+    newCapturingSettings.MaximumFPS = std::stod(argv[15]);
+    newCapturingSettings.LaserPower = std::stoi(argv[16]);
+    
+    // Direct assignment for ProjectionOffsetLeft, ProjectionOffsetRight, LedPower.
+    // If these fields do not exist in your pho::api::PhoXiCapturingSettings struct,
+    // this will cause a COMPILE-TIME ERROR.
+    // If they exist but are not supported by the device, the API might ignore them,
+    // or the PhoXiDevice->CapturingSettings = newCapturingSettings; call might fail
+    // (indicated by isLastOperationSuccessful).
+    newCapturingSettings.ProjectionOffsetLeft = std::stoi(argv[17]);
+    newCapturingSettings.ProjectionOffsetRight = std::stoi(argv[18]);
+    newCapturingSettings.LedPower = std::stoi(argv[19]);
+
+    PhoXiDevice->CapturingSettings = newCapturingSettings;
+    if (!PhoXiDevice->CapturingSettings.isLastOperationSuccessful())
+    {
+        throw std::runtime_error("Failed to set CapturingSettings (possibly due to unsupported individual parameters like ProjectionOffset/LedPower or other issues): " + std::string(PhoXiDevice->CapturingSettings.GetLastErrorMessage().c_str()));
+    }
+    
 
     // Processing Settings
-    if (PhoXiDevice->ProcessingSettings.isEnabled() && PhoXiDevice->ProcessingSettings.CanSet())
-    {
-        pho::api::PhoXiProcessingSettings newProcessingSettings = PhoXiDevice->ProcessingSettings;
-        newProcessingSettings.Confidence = std::stod(argv[20]); 
-        newProcessingSettings.SurfaceSmoothness = argv[21];
-        newProcessingSettings.NormalsEstimationRadius = std::stoi(argv[22]);
-        if(PhoXiDevice->Features.IsSupported("ProcessingSettings.InterreflectionsFiltering")) newProcessingSettings.InterreflectionsFiltering = static_cast<bool>(std::stoi(argv[23]));
-        else std::cerr << "Warning: ProcessingSettings.InterreflectionsFiltering not supported or name incorrect." << std::endl;
+    if (!PhoXiDevice->ProcessingSettings.isEnabled() 
+        || !PhoXiDevice->ProcessingSettings.CanSet() 
+        || !PhoXiDevice->ProcessingSettings.CanGet()) {
+        std::cerr << "Warning: ProcessingSettings group is not fully enabled or accessible. Attempting to set anyway." << std::endl;
+    }
 
-        PhoXiDevice->ProcessingSettings = newProcessingSettings;
-        if (!PhoXiDevice->ProcessingSettings.isLastOperationSuccessful())
-        {
-            throw std::runtime_error("Failed to set ProcessingSettings: " + std::string(PhoXiDevice->ProcessingSettings.GetLastErrorMessage().c_str()));
-        }
+    pho::api::PhoXiProcessingSettings newProcessingSettings = PhoXiDevice->ProcessingSettings;
+    if (!PhoXiDevice->ProcessingSettings.isLastOperationSuccessful()){
+         throw std::runtime_error("Failed to get current ProcessingSettings: " + std::string(PhoXiDevice->ProcessingSettings.GetLastErrorMessage().c_str()));
     }
-    else
+
+    newProcessingSettings.Confidence = std::stod(argv[20]); 
+    newProcessingSettings.SurfaceSmoothness = argv[21];
+    newProcessingSettings.NormalsEstimationRadius = std::stoi(argv[22]);
+    // API name from example is InterreflectionsFiltering (boolean)
+    newProcessingSettings.InterreflectionsFiltering = static_cast<bool>(std::stoi(argv[23]));
+
+    PhoXiDevice->ProcessingSettings = newProcessingSettings;
+    if (!PhoXiDevice->ProcessingSettings.isLastOperationSuccessful())
     {
-        std::cerr << "Warning: ProcessingSettings are not enabled or cannot be set." << std::endl;
+        throw std::runtime_error("Failed to set ProcessingSettings: " + std::string(PhoXiDevice->ProcessingSettings.GetLastErrorMessage().c_str()));
     }
+    
 
     // Experimental Settings
-    if (PhoXiDevice->Features.IsSupported("ExperimentalSettings") && PhoXiDevice->ExperimentalSettings.isEnabled() && PhoXiDevice->ExperimentalSettings.CanSet())
-    {
+    // The FullAPIExample does not show ExperimentalSettings, so access patterns are an educated guess.
+    // Assuming it follows the same pattern as CapturingSettings/ProcessingSettings.
+    if (PhoXiDevice->Features.IsSupported("ExperimentalSettings")) { // Keep this high-level check if available, otherwise remove
+        if (!PhoXiDevice->ExperimentalSettings.isEnabled() 
+            || !PhoXiDevice->ExperimentalSettings.CanSet() 
+            || !PhoXiDevice->ExperimentalSettings.CanGet()) {
+             std::cerr << "Warning: ExperimentalSettings group is not fully enabled or accessible. Attempting to set anyway." << std::endl;
+        }
+
         pho::api::PhoXiExperimentalSettings newExperimentalSettings = PhoXiDevice->ExperimentalSettings;
-        if(PhoXiDevice->Features.IsSupported("ExperimentalSettings.AmbientLightSuppressionCompatibilityMode")) newExperimentalSettings.AmbientLightSuppressionCompatibilityMode = static_cast<bool>(std::stoi(argv[24]));
-        else std::cerr << "Warning: ExperimentalSettings.AmbientLightSuppressionCompatibilityMode not supported." << std::endl;
-        if(PhoXiDevice->Features.IsSupported("ExperimentalSettings.PatternDecompositionReach")) newExperimentalSettings.PatternDecompositionReach = argv[25];
-        else std::cerr << "Warning: ExperimentalSettings.PatternDecompositionReach not supported." << std::endl;
-        if(PhoXiDevice->Features.IsSupported("ExperimentalSettings.SignalContrastThreshold")) newExperimentalSettings.SignalContrastThreshold = std::stod(argv[26]);
-        else std::cerr << "Warning: ExperimentalSettings.SignalContrastThreshold not supported." << std::endl;
-        if(PhoXiDevice->Features.IsSupported("ExperimentalSettings.UseExtendedLogging")) newExperimentalSettings.UseExtendedLogging = static_cast<bool>(std::stoi(argv[27]));
-        else std::cerr << "Warning: ExperimentalSettings.UseExtendedLogging not supported." << std::endl;
+        if (!PhoXiDevice->ExperimentalSettings.isLastOperationSuccessful()){
+            std::cerr << "Warning: Failed to get current ExperimentalSettings: " << std::string(PhoXiDevice->ExperimentalSettings.GetLastErrorMessage().c_str()) << std::endl;
+            // Not throwing an error here as these are experimental
+        }
+
+        // Direct assignment. COMPILE-TIME ERROR if these fields don't exist.
+        // Runtime behavior depends on API/device if fields exist but are unsupported.
+        newExperimentalSettings.AmbientLightSuppressionCompatibilityMode = static_cast<bool>(std::stoi(argv[24]));
+        newExperimentalSettings.PatternDecompositionReach = argv[25];
+        newExperimentalSettings.SignalContrastThreshold = std::stod(argv[26]);
+        newExperimentalSettings.UseExtendedLogging = static_cast<bool>(std::stoi(argv[27]));
         
         PhoXiDevice->ExperimentalSettings = newExperimentalSettings;
         if (!PhoXiDevice->ExperimentalSettings.isLastOperationSuccessful())
         {
+            // Don't throw for experimental, just warn
             std::cerr << "Warning: Failed to set some ExperimentalSettings: " << std::string(PhoXiDevice->ExperimentalSettings.GetLastErrorMessage().c_str()) << std::endl;
         }
+    } else {
+        std::cerr << "Warning: ExperimentalSettings feature group itself is not reported as supported by PhoXiDevice->Features.IsSupported(). Skipping ExperimentalSettings." << std::endl;
     }
-    else
-    {
-        std::cerr << "Warning: ExperimentalSettings are not supported, enabled or cannot be set." << std::endl;
-    }
+
 
     std::cout << "Settings changed attempt completed." << std::endl;
 }
 
-void CaptureNew::CaptureNewAndSaveFrame(int argc, char *argv[])
+void Capture::CaptureAndSaveFrame(int argc, char *argv[])
 {
     if (!PhoXiDevice || !PhoXiDevice->isConnected()) 
     {
         std::cerr << "Device is not created, or not connected for capture!" << std::endl;
-        throw std::runtime_error("Device not connected during CaptureNewAndSaveFrame.");
+        throw std::runtime_error("Device not connected during CaptureAndSaveFrame.");
     }
 
     if (PhoXiDevice->TriggerMode != pho::api::PhoXiTriggerMode::Software)
@@ -290,14 +296,11 @@ void CaptureNew::CaptureNewAndSaveFrame(int argc, char *argv[])
     }
 
     std::cout << "Triggering frame..." << std::endl;
-    int FrameID = PhoXiDevice->TriggerFrame(true);
+    int FrameID = PhoXiDevice->TriggerFrame(true); // WaitForGrabbingEnd = true
 
     if (FrameID < 0)
     {
         std::cerr << "Trigger was unsuccessful! Error code: " << FrameID << std::endl;
-        // PhoXiDevice->GetLastError might provide more info specific to the device context,
-        // but TriggerFrame itself returning < 0 is the primary indicator from the API example.
-        // The GetLastErrorMessage on the TriggerMode feature might not be relevant here if the mode was set successfully earlier.
         throw std::runtime_error("Frame trigger failed with code: " + std::to_string(FrameID));
     }
     else
@@ -334,13 +337,12 @@ void CaptureNew::CaptureNewAndSaveFrame(int argc, char *argv[])
         else
         {
             std::cerr << "Could not save frame as .praw to: " << lastFramePraw << " ! Check PhoXi Control logs and ensure path is writable." << std::endl;
-             // PhoXiDevice->GetLastError() might be useful here if the API supports it after SaveLastOutput
         }
     }
 
     if (std::stoi(argv[4]) == 1)
     {
-        if (LastFrame && !LastFrame->PointCloud.Empty()) // Ensure LastFrame is valid
+        if (LastFrame && !LastFrame->PointCloud.Empty()) 
         {
             std::string plysSaveDir = argv[29];
             const std::string lastFramePly = plysSaveDir + DELIMITER + sceneName + ".ply";
@@ -385,31 +387,30 @@ void CaptureNew::CaptureNewAndSaveFrame(int argc, char *argv[])
     }
 }
 
-void CaptureNew::Run(int argc, char *argv[])
+void Capture::Run(int argc, char *argv[])
 {
     try
     {
         ConnectPhoXiDeviceBySerial(argc, argv);
         ChangeSettings(argc, argv);
-        CaptureNewAndSaveFrame(argc, argv);
+        CaptureAndSaveFrame(argc, argv);
     }
     catch (const std::runtime_error &e) 
     {
         std::cerr << std::endl
                   << "A runtime error occurred: " << e.what() << std::endl;
     }
-    catch (const std::exception &e) // Catch other std::exceptions (e.g., from std::stoi)
+    catch (const std::exception &e) 
     {
         std::cerr << std::endl 
                   << "A standard exception occurred: " << e.what() << std::endl;
     }
-    catch (...) // Catch-all for any other non-standard exceptions
+    catch (...) 
     {
         std::cerr << std::endl
                   << "An unknown non-standard exception occurred." << std::endl;
     }
 
-    // Final cleanup
     if (PhoXiDevice) 
     {
         if (PhoXiDevice->isConnected())
@@ -422,7 +423,7 @@ void CaptureNew::Run(int argc, char *argv[])
                      std::cerr << "Warning: Failed to stop acquisition during final disconnect: " << std::string(PhoXiDevice->GetLastErrorMessage().c_str()) << std::endl;
                 }
             }
-            PhoXiDevice->Disconnect(true /*logout device*/);
+            PhoXiDevice->Disconnect(true);
             std::cout << "Device disconnected." << std::endl;
         }
          PhoXiDevice = nullptr; 
@@ -434,25 +435,26 @@ int main(int argc, char *argv[])
     if (argc < 32)
     {
         std::cerr << "Usage: " << argv[0]
-                  << " <hw_id> <scene_name> <save_praw> <save_ply> <save_tif> " // 1-5
-                  << "<shutter_mult> <scan_mult> <res_idx> <cam_only> <ambient_suppress> " // 6-10
-                  << "<coding_strat> <coding_qual> <texture_src> <single_pat_exp> <max_fps> " // 11-15
-                  << "<laser_pow> <proj_off_L> <proj_off_R> <led_pow> " // 16-19
-                  << "<max_inaccuracy> <surf_smooth> <norm_radius> <interreflect_filter> " // 20-23
-                  << "<exp_als_compat> <exp_pat_decomp> <exp_sig_thresh> <exp_ext_log> " // 24-27
-                  << "<praw_dir> <ply_dir> <tif_dir> <ip_address>" // 28-31
+                  << " <hw_id> <scene_name> <save_praw> <save_ply> <save_tif> " 
+                  << "<shutter_mult> <scan_mult> <res_idx> <cam_only> <ambient_suppress> " 
+                  << "<coding_strat> <coding_qual> <texture_src> <single_pat_exp> <max_fps> " 
+                  << "<laser_pow> <proj_off_L> <proj_off_R> <led_pow> " 
+                  << "<max_inaccuracy> <surf_smooth> <norm_radius> <interreflect_filter> " 
+                  << "<exp_als_compat> <exp_pat_decomp> <exp_sig_thresh> <exp_ext_log> " 
+                  << "<praw_dir> <ply_dir> <tif_dir> <ip_address>" 
                   << std::endl;
         std::cerr << "Received " << argc - 1 << " arguments, expected 31." << std::endl;
         return 1;
     }
 
-    std::cout << "Starting CaptureNew Program with " << argc - 1 << " arguments." << std::endl;
-    for(int i = 0; i < argc; ++i) {
-        std::cout << "  argv[" << i << "]: " << argv[i] << std::endl;
-    }
+    std::cout << "Starting Capture Program with " << argc - 1 << " arguments." << std::endl;
+    // Optional: Print all arguments for debugging
+    // for(int i = 0; i < argc; ++i) {
+    //     std::cout << "  argv[" << i << "]: " << argv[i] << std::endl;
+    // }
     
-    CaptureNew Example;
+    Capture Example;
     Example.Run(argc, argv);
-    std::cout << "CaptureNew Program finished." << std::endl;
+    std::cout << "Capture Program finished." << std::endl;
     return 0;
 }
