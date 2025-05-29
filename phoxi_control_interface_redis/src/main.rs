@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Err(e) => {
             log::error!(target: &&format!("phoxi_control_interface"), "Failed to read PHOTONEO_ID with error: '{}'.", e);
             log::warn!(target: &&format!("phoxi_control_interface"), "Setting default PHOTONEO_ID 1708011.");
-            "phoxi_1708011".to_string()
+            "photoneo_1708011".to_string()
         }
     };
     let phoxi_scans_path = match std::env::var("PHOXI_SCANS_PATH") {
