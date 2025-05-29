@@ -50,7 +50,7 @@
 // 30 - tif_dir (string path)
 // 31 - ip_identification (string, e.g., "192.168.1.27")
 
-class Capture
+class CaptureNewIPv4
 {
 private:
     pho::api::PhoXiFactory Factory;
@@ -66,7 +66,7 @@ private:
     void ConnectPhoXiDeviceBySerial(int argc, char *argv[]);
     void ConnectPhoXiDeviceByIPAddress(int argc, char *argv[]);
     void ChangeSettings(int argc, char* argv[]);
-    void CaptureAndSaveFrame(int argc, char *argv[]);
+    void CaptureNewIPv4AndSaveFrame(int argc, char *argv[]);
 
     template <class T>
     bool ReadLine(T &Output) const
@@ -83,12 +83,12 @@ private:
     }
 
 public:
-    Capture(){};
-    ~Capture(){};
+    CaptureNewIPv4(){};
+    ~CaptureNewIPv4(){};
     void Run(int argc, char *argv[]);
 };
 
-void Capture::ConnectPhoXiDeviceBySerial(int argc, char *argv[])
+void CaptureNewIPv4::ConnectPhoXiDeviceBySerial(int argc, char *argv[])
 {
     pho::api::PhoXiTimeout Timeout = pho::api::PhoXiTimeout::ZeroTimeout;
     std::string hardware_identification = argv[1];
@@ -121,7 +121,7 @@ void ConnectIPv4::ConnectPhoXiDeviceByIPAddress(int argc, char* argv[])
     }
 }
 
-void Capture::ChangeSettings(int argc, char* argv[])
+void CaptureNewIPv4::ChangeSettings(int argc, char* argv[])
 {
     PhoXiDevice->CapturingSettings->ShutterMultiplier = std::stod(argv[6]);
     PhoXiDevice->CapturingSettings->ScanMultiplier = std::stoi(argv[7]);
@@ -154,7 +154,7 @@ void Capture::ChangeSettings(int argc, char* argv[])
     // PhoxiDevice->ExperimentalSettings->UseExtendedLogging = std::stoi(argv[24]);
 }
 
-void Capture::CaptureAndSaveFrame(int argc, char *argv[])
+void CaptureNewIPv4::CaptureNewIPv4AndSaveFrame(int argc, char *argv[])
 {
     if (!PhoXiDevice || !PhoXiDevice->isConnected())
     {
@@ -269,14 +269,14 @@ void Capture::CaptureAndSaveFrame(int argc, char *argv[])
     }
 }
 
-void Capture::Run(int argc, char *argv[])
+void CaptureNewIPv4::Run(int argc, char *argv[])
 {
     try
     {
         // ConnectPhoXiDeviceBySerial(argc, argv);
         ConnectPhoXiDeviceByIPAddress(argc, argv);
         ChangeSettings(argc, argv);
-        CaptureAndSaveFrame(argc, argv);
+        CaptureNewIPv4AndSaveFrame(argc, argv);
     }
     catch (std::runtime_error &InternalException)
     {
@@ -291,7 +291,7 @@ void Capture::Run(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-    Capture Example;
+    CaptureNewIPv4 Example;
     Example.Run(argc, argv);
     return 0;
 }
