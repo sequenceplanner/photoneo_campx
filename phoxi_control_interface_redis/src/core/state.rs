@@ -26,9 +26,9 @@ pub fn generate_photoneo_interface_state(photoneo_name: &str) -> State {
     let praw = bv!(&&format!("{}_praw", photoneo_name));
     let ply = bv!(&&format!("{}_ply", photoneo_name));
     let tif = bv!(&&format!("{}_tif", photoneo_name));
-    let praw_dir = v!(&&format!("{}_praw_dir", photoneo_name));
-    let ply_dir = v!(&&format!("{}_ply_dir", photoneo_name));
-    let tif_dir = v!(&&format!("{}_tif_dir", photoneo_name));
+    // let praw_dir = v!(&&format!("{}_praw_dir", photoneo_name));
+    // let ply_dir = v!(&&format!("{}_ply_dir", photoneo_name));
+    // let tif_dir = v!(&&format!("{}_tif_dir", photoneo_name));
     let timeout = iv!(&&format!("{}_timeout", photoneo_name));
     let settings = v!(&&format!("{}_settings", photoneo_name));
     let phoxi_raw_info = v!(&&format!("{}_phoxi_raw_info", photoneo_name));
@@ -38,9 +38,9 @@ pub fn generate_photoneo_interface_state(photoneo_name: &str) -> State {
     let state = state.add(assign!(praw, SPValue::Bool(BoolOrUnknown::UNKNOWN)));
     let state = state.add(assign!(ply, SPValue::Bool(BoolOrUnknown::UNKNOWN)));
     let state = state.add(assign!(tif, SPValue::Bool(BoolOrUnknown::UNKNOWN)));
-    let state = state.add(assign!(praw_dir, SPValue::String(StringOrUnknown::UNKNOWN)));
-    let state = state.add(assign!(ply_dir, SPValue::String(StringOrUnknown::UNKNOWN)));
-    let state = state.add(assign!(tif_dir, SPValue::String(StringOrUnknown::UNKNOWN)));
+    // let state = state.add(assign!(praw_dir, SPValue::String(StringOrUnknown::UNKNOWN)));
+    // let state = state.add(assign!(ply_dir, SPValue::String(StringOrUnknown::UNKNOWN)));
+    // let state = state.add(assign!(tif_dir, SPValue::String(StringOrUnknown::UNKNOWN)));
     let state = state.add(assign!(timeout, SPValue::Int64(IntOrUnknown::UNKNOWN)));
     let state = state.add(assign!(settings, SPValue::String(StringOrUnknown::UNKNOWN)));
     let state = state.add(assign!(phoxi_raw_info, SPValue::String(StringOrUnknown::UNKNOWN)));

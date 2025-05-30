@@ -84,21 +84,6 @@ pub async fn photoneo_control_interface(
                     &format!("{}_tif", photoneo_id),
                 );
 
-                // let praw_dir = state.get_string_or_default_to_unknown(
-                //     &format!("{}_control_interface", photoneo_id),
-                //     &format!("{}_praw_dir", photoneo_id),
-                // );
-
-                // let ply_dir = state.get_string_or_default_to_unknown(
-                //     &format!("{}_control_interface", photoneo_id),
-                //     &format!("{}_ply_dir", photoneo_id),
-                // );
-
-                // let tif_dir = state.get_string_or_default_to_unknown(
-                //     &format!("{}_control_interface", photoneo_id),
-                //     &format!("{}_tif_dir", photoneo_id),
-                // );
-
                 let praw_dir = format!("{phoxi_scans_path}/praw");
                 let ply_dir = format!("{phoxi_scans_path}/ply");
                 let tif_dir = format!("{phoxi_scans_path}/tif");
