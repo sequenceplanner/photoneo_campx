@@ -438,7 +438,7 @@ fn prepare_arguments(
 
     // 0 - executable photoneo_id
     args_list.push(format!(
-        "{}/cpp_executables/dev/Localize/Localize_Release",
+        "{}/cpp_executables/dev/Localize/bin/Localize_Release",
         localization_interface_path,
     ));
 
