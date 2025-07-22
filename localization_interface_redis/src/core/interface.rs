@@ -320,9 +320,12 @@ fn parse_result(request: &LocalizeRequest, data: &[Vec<u8>]) -> ParsedResult {
 
     parsed.count = parsed.results.len();
 
-    if request.stop_at_number as usize > parsed.count {
+    if parsed.count == 0 {
         parsed.success = false;
-        parsed.stop_criteria_met = true;
+        parsed.stop_criteria_met = false;
+    } else if request.stop_at_number as usize > parsed.count {
+        parsed.success = true;
+        parsed.stop_criteria_met = false;
     } else {
         parsed.success = true;
         parsed.stop_criteria_met = true;
