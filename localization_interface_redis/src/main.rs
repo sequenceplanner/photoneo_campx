@@ -49,14 +49,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let localization_interface_path = match std::env::var("PHOXI_INTERFACE_PATH") {
+    let localization_interface_path = match std::env::var("PHOLOC_INTERFACE_PATH") {
         Ok(dir) => dir,
         Err(e) => {
             log::error!(target: &&format!("phoxi_localization_interface"), 
-                "Failed to read PHOXI_INTERFACE_PATH environment variable: {}", e);
+                "Failed to read PHOLOC_INTERFACE_PATH environment variable: {}", e);
             log::warn!(target: &&format!("phoxi_localization_interface"), 
-                "Setting PHOXI_INTERFACE_PATH to /usr/local/src/photoneo_campx/phoxi_control_interface_redis.");
-            "/usr/local/src/photoneo_campx/phoxi_control_interface_redis".to_string()
+                "Setting PHOLOC_INTERFACE_PATH to /usr/local/src/photoneo_campx/localization_interface_redis.");
+            "/usr/local/src/photoneo_campx/localization_interface_redis".to_string()
         }
     };
 
