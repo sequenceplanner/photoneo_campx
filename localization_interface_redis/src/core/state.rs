@@ -23,6 +23,7 @@ pub fn generate_photoneo_localization_interface_state(photoneo_name: &str) -> St
     let count = iv!(&&format!("{}_localization_count", photoneo_name));
     let transforms = av!(&&format!("{}_localization_transforms", photoneo_name));
     let settings = v!(&&format!("{}_localization_settings", photoneo_name));
+    let scanning_frame = v!(&&format!("{}_localization_scanning_frame", photoneo_name));
 
     let state = state.add(assign!(scene_name, SPValue::String(StringOrUnknown::UNKNOWN)));
     let state = state.add(assign!(target_name, SPValue::String(StringOrUnknown::UNKNOWN)));
@@ -34,6 +35,7 @@ pub fn generate_photoneo_localization_interface_state(photoneo_name: &str) -> St
     let state = state.add(assign!(count, SPValue::Int64(IntOrUnknown::UNKNOWN)));
     let state = state.add(assign!(transforms, SPValue::Array(ArrayOrUnknown::UNKNOWN)));
     let state = state.add(assign!(settings, SPValue::String(StringOrUnknown::UNKNOWN)));
+    let state = state.add(assign!(scanning_frame, SPValue::String(StringOrUnknown::UNKNOWN)));
 
     state
 }

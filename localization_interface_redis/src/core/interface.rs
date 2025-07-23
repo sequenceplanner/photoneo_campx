@@ -74,6 +74,11 @@ pub async fn photoneo_localization_interface(
                     &format!("{}_localization_settings", photoneo_id),
                 );
 
+                let scanning_frame = state.get_string_or_default_to_unknown(
+                    &format!("{}_localization_interface", photoneo_id),
+                    &format!("{}_localization_scanning_frame", photoneo_id),
+                );
+
                 let praw_dir = format!("{phoxi_scans_path}/praw");
                 let ply_dir = format!("{phoxi_scans_path}/ply");
                 let plcf_dir = format!("{plcfs_path}");
@@ -107,7 +112,7 @@ pub async fn photoneo_localization_interface(
                         );
                         request_state = ServiceRequestState::Succeeded.to_string();
                         let result = parse_result(&localize_request, &output_lines);
-                        let resulting_tfs = make_transforms(&result.results);
+                        let resulting_tfs = make_transforms(&result.results, &scanning_frame);
                         success = result.success;
                         stop_criteria_met = result.stop_criteria_met;
                         count = result.count;
@@ -345,7 +350,7 @@ fn parse_float(data: &[u8]) -> Option<f64> {
 
 type MatrixDataInternal = [[f64; 4]; 4];
 
-pub fn make_transforms(matrices: &[(MatrixDataInternal, String)]) -> Vec<SPTransformStamped> {
+pub fn make_transforms(matrices: &[(MatrixDataInternal, String)], scanning_frame: &str) -> Vec<SPTransformStamped> {
     let mut transforms: Vec<SPTransformStamped> = Vec::new();
 
     for (_i, (matrix_array, name)) in matrices.iter().enumerate() {
@@ -370,7 +375,7 @@ pub fn make_transforms(matrices: &[(MatrixDataInternal, String)]) -> Vec<SPTrans
             active_transform: true,
             enable_transform: true,
             time_stamp: SystemTime::now(),
-            parent_frame_id: "photoneo_sensor".to_string(),
+            parent_frame_id: scanning_frame.to_string(),
             child_frame_id,
             transform: SPTransform {
                 translation: SPTranslation {
