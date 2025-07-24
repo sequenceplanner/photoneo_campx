@@ -1,6 +1,6 @@
 use crate::*;
 // use micro_sp::*;
-use nalgebra::{Matrix4, Quaternion, UnitQuaternion, Vector3};
+use nalgebra::{Matrix4, Quaternion, SymmetricEigen, UnitQuaternion, Vector3};
 use ordered_float::OrderedFloat;
 // use nanoid::nanoid;
 use serde_json::Value;
@@ -265,6 +265,51 @@ impl ParsedResult {
     }
 }
 
+fn quaternion_from_matrix(matrix: &Matrix4<f64>) -> UnitQuaternion<f64> {
+    // Extract the elements of the 3x3 rotation submatrix
+    let m00 = matrix[(0, 0)]; let m01 = matrix[(0, 1)]; let m02 = matrix[(0, 2)];
+    let m10 = matrix[(1, 0)]; let m11 = matrix[(1, 1)]; let m12 = matrix[(1, 2)];
+    let m20 = matrix[(2, 0)]; let m21 = matrix[(2, 1)]; let m22 = matrix[(2, 2)];
+
+    // Build the symmetric matrix K, just like in the Python code.
+    // We create the full symmetric matrix for clarity.
+    let mut k = Matrix4::new(
+        m00 - m11 - m22, m01 + m10,       m02 + m20,       m21 - m12,
+        m01 + m10,       m11 - m00 - m22, m12 + m21,       m02 - m20,
+        m02 + m20,       m12 + m21,       m22 - m00 - m11, m10 - m01,
+        m21 - m12,       m02 - m20,       m10 - m01,       m00 + m11 + m22,
+    );
+    k /= 3.0;
+
+    // Quaternion is the eigenvector of K that corresponds to the largest eigenvalue.
+    // nalgebra's SymmetricEigen is the equivalent of numpy.linalg.eigh.
+    let eig = SymmetricEigen::new(k);
+
+    // Find the index of the largest eigenvalue.
+    let max_eigenvalue_index = eig.eigenvalues.imax();
+
+    // Get the corresponding eigenvector (which is a column).
+    let eigenvector = eig.eigenvectors.column(max_eigenvalue_index);
+
+    // Reorder the eigenvector components to form the quaternion [w, x, y, z].
+    // This matches the Python line: `q = V[[3, 0, 1, 2], numpy.argmax(w)]`
+    let w = eigenvector[3];
+    let x = eigenvector[0];
+    let y = eigenvector[1];
+    let z = eigenvector[2];
+
+    let mut quat = Quaternion::new(w, x, y, z);
+
+    // Ensure w is non-negative, as is convention.
+    // `if q[0] < 0.0: numpy.negative(q, q)`
+    if quat.w < 0.0 {
+        quat = -quat;
+    }
+
+    // Return as a UnitQuaternion, which is normalized and represents a pure rotation.
+    UnitQuaternion::from_quaternion(quat)
+}
+
 fn parse_result(request: &LocalizeRequest, data: &[Vec<u8>]) -> ParsedResult {
     let mut parsed = ParsedResult::new();
     let mut result_lines: Vec<usize> = Vec::new();
@@ -431,12 +476,13 @@ pub fn make_transforms(matrices: &[(MatrixDataInternal, String)], scanning_frame
 
         log::info!(target: "phoxi_localization_interface", "Processing matrix for {}: {:?}", name, transformation_matrix);
 
-        let translation_vec = transformation_matrix.column(3).xyz(); //Vector3::new(m[0][3], m[1][3], m[2][3]);
+        let translation_vec = Vector3::new(m[0][3], m[1][3], m[2][3]); //transformation_matrix.column(3).xyz(); //Vector3::new(m[0][3], m[1][3], m[2][3]);
 
-        let rotation_matrix = transformation_matrix.fixed_view::<3, 3>(0, 0).into_owned();
+        // let rotation_matrix = transformation_matrix.fixed_view::<3, 3>(0, 0).into_owned();
+        let q = quaternion_from_matrix(&transformation_matrix);
 
-        let unit_quaternion = UnitQuaternion::from_matrix(&rotation_matrix);
-        let q: &Quaternion<f64> = unit_quaternion.quaternion();
+        // let unit_quaternion = UnitQuaternion::from_matrix(&rotation_matrix);
+        // let q: &Quaternion<f64> = unit_quaternion.quaternion();
 
         let child_frame_id = format!("{}_instance_{}", name, nanoid::nanoid!(6));
 
