@@ -468,21 +468,21 @@ pub fn make_transforms(matrices: &[(MatrixDataInternal, String)], scanning_frame
         //     m[0][0], m[1][0], m[2][0], m[3][0], m[0][1], m[1][1], m[2][1], m[3][1], m[0][2],
         //     m[1][2], m[2][2], m[3][2], m[0][3], m[1][3], m[2][3], m[3][3],
         // );
-        // let transformation_matrix = Matrix4::new(
-        //     m[0][0], m[0][1], m[0][2], m[0][3], m[1][0], m[1][1], m[1][2], m[1][3], m[2][0],
-        //     m[2][1], m[2][2], m[2][3], m[3][0], m[3][1], m[3][2], m[3][3],
-        // );
-        let transformation_matrix = Matrix4::from(*matrix_array);
+        let transformation_matrix = Matrix4::new(
+            m[0][0], m[0][1], m[0][2], m[0][3], m[1][0], m[1][1], m[1][2], m[1][3], m[2][0],
+            m[2][1], m[2][2], m[2][3], m[3][0], m[3][1], m[3][2], m[3][3],
+        );
+        // let transformation_matrix = Matrix4::from(*matrix_array);
 
         log::info!(target: "phoxi_localization_interface", "Processing matrix for {}: {:?}", name, transformation_matrix);
 
         let translation_vec = Vector3::new(m[0][3], m[1][3], m[2][3]); //transformation_matrix.column(3).xyz(); //Vector3::new(m[0][3], m[1][3], m[2][3]);
 
-        // let rotation_matrix = transformation_matrix.fixed_view::<3, 3>(0, 0).into_owned();
-        let q = quaternion_from_matrix(&transformation_matrix);
+        let rotation_matrix = transformation_matrix.fixed_view::<3, 3>(0, 0).into_owned();
+        // let q = quaternion_from_matrix(&transformation_matrix);
 
-        // let unit_quaternion = UnitQuaternion::from_matrix(&rotation_matrix);
-        // let q: &Quaternion<f64> = unit_quaternion.quaternion();
+        let unit_quaternion = UnitQuaternion::from_matrix(&rotation_matrix);
+        let q: &Quaternion<f64> = unit_quaternion.quaternion();
 
         let child_frame_id = format!("{}_instance_{}", name, nanoid::nanoid!(6));
 
