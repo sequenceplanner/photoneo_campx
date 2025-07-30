@@ -1,11 +1,8 @@
 use crate::*;
 use serde_json::Value;
-use tokio::{
-    sync::{mpsc, oneshot},
-    time::{interval, Duration},
-};
+use tokio::time::{interval, Duration};
 
-use std::sync::mpsc as sync_mpsc;
+use std::sync::{mpsc as sync_mpsc, Arc};
 
 use super::state::ScanRequest;
 
@@ -13,93 +10,106 @@ pub async fn photoneo_control_interface(
     photoneo_id: &str,
     phoxi_scans_path: &str,
     phoxi_interface_path: &str,
-    command_sender: mpsc::Sender<StateManagement>,
+    connection_manager: &Arc<ConnectionManager>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut interval = interval(Duration::from_millis(100));
+    let mut interval = interval(Duration::from_millis(250));
+    let log_target = &format!("phoxi_control_interface");
+    log::info!(target: &log_target, "Online.");
 
-    log::info!(target: &&format!("phoxi_control_interface"), "Online.");
+    let keys: Vec<String> = vec![
+        &format!("{}_request_trigger", photoneo_id),
+        &format!("{}_request_state", photoneo_id),
+        &format!("{}_name_identification", photoneo_id),
+        &format!("{}_hardware_identification", photoneo_id),
+        &format!("{}_ip_identification", photoneo_id),
+        &format!("{}_command_type", photoneo_id),
+        &format!("{}_scene_name", photoneo_id),
+        &format!("{}_praw", photoneo_id),
+        &format!("{}_ply", photoneo_id),
+        &format!("{}_tif", photoneo_id),
+        &format!("{}_timeout", photoneo_id),
+        &format!("{}_settings", photoneo_id),
+    ]
+    .iter()
+    .map(|k| k.to_string())
+    .collect();
 
+    let mut con = connection_manager.get_connection().await;
     loop {
-        let (response_tx, response_rx) = oneshot::channel();
-        command_sender
-            .send(StateManagement::GetState(response_tx))
-            .await?;
-        let state = response_rx.await?;
+        interval.tick().await;
+        if let Err(_) = connection_manager.check_redis_health(&log_target).await {
+            continue;
+        }
+        let state = match StateManager::get_state_for_keys(&mut con, &keys).await {
+            Some(s) => s,
+            None => continue,
+        };
 
-        let mut request_trigger = state.get_bool_or_default_to_false(
-            &format!("{}_control_interface", photoneo_id),
-            &format!("{}_request_trigger", photoneo_id),
-        );
+        let mut request_trigger = state
+            .get_bool_or_default_to_false(&format!("{}_request_trigger", photoneo_id), &log_target);
 
         let mut request_state = state.get_string_or_default_to_unknown(
-            &format!("{}_control_interface", photoneo_id),
             &format!("{}_request_state", photoneo_id),
+            &log_target,
         );
 
         if request_trigger {
             request_trigger = false;
             if request_state == ServiceRequestState::Initial.to_string() {
                 let name_identification = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", photoneo_id),
                     &format!("{}_name_identification", photoneo_id),
+                    &log_target,
                 );
 
                 let hardware_identification = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", photoneo_id),
                     &format!("{}_hardware_identification", photoneo_id),
+                    &log_target,
                 );
 
                 let ip_identification = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", photoneo_id),
                     &format!("{}_ip_identification", photoneo_id),
+                    &log_target,
                 );
 
                 let phoxi_raw_info;
 
                 let command_type = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", photoneo_id),
                     &format!("{}_command_type", photoneo_id),
+                    &log_target,
                 );
 
                 let scene_name = state.get_string_or_default_to_unknown(
-                    &format!("{}_control_interface", photoneo_id),
                     &format!("{}_scene_name", photoneo_id),
+                    &log_target,
                 );
 
-                let praw = match state.get_bool_or_unknown(
-                    &format!("{}_control_interface", photoneo_id),
-                    &format!("{}_praw", photoneo_id),
-                ) {
+                let praw = match state
+                    .get_bool_or_unknown(&format!("{}_praw", photoneo_id), &log_target)
+                {
                     BoolOrUnknown::UNKNOWN => true,
                     BoolOrUnknown::Bool(val) => val,
                 };
 
-                let ply = state.get_bool_or_default_to_false(
-                    &format!("{}_control_interface", photoneo_id),
-                    &format!("{}_ply", photoneo_id),
-                );
+                let ply = state
+                    .get_bool_or_default_to_false(&format!("{}_ply", photoneo_id), &log_target);
 
-                let tif = state.get_bool_or_default_to_false(
-                    &format!("{}_control_interface", photoneo_id),
-                    &format!("{}_tif", photoneo_id),
-                );
+                let tif = state
+                    .get_bool_or_default_to_false(&format!("{}_tif", photoneo_id), &log_target);
 
                 let praw_dir = format!("{phoxi_scans_path}/praw");
                 let ply_dir = format!("{phoxi_scans_path}/ply");
                 let tif_dir = format!("{phoxi_scans_path}/tif");
 
-                let timeout = match state.get_int_or_unknown(
-                    &format!("{}_control_interface", photoneo_id),
-                    &format!("{}_timeout", photoneo_id),
-                ) {
+                let timeout = match state
+                    .get_int_or_unknown(&format!("{}_timeout", photoneo_id), &log_target)
+                {
                     IntOrUnknown::UNKNOWN => 5000,
                     IntOrUnknown::Int64(int) => int,
                 };
 
-                let settings = match state.get_string_or_unknown(
-                    &format!("{}_control_interface", photoneo_id),
-                    &format!("{}_settings", photoneo_id),
-                ) {
+                let settings = match state
+                    .get_string_or_unknown(&format!("{}_settings", photoneo_id), &log_target)
+                {
                     StringOrUnknown::UNKNOWN => "default".to_string(),
                     StringOrUnknown::String(val) => val,
                 };
@@ -122,16 +132,14 @@ pub async fn photoneo_control_interface(
 
                 match call_blocking_exec(scan_request, phoxi_interface_path, &photoneo_id) {
                     Ok(val) => {
-                        log::info!(target: &&format!(
-                            "phoxi_control_interface"),
+                        log::info!(target: &log_target,
                             "Photoneo request succeeded. Check {photoneo_id}_phoxi_raw_info for feedback from the scanner."
                         );
                         request_state = ServiceRequestState::Succeeded.to_string();
                         phoxi_raw_info = val[0].clone();
                     }
                     Err(e) => {
-                        log::error!(target: &&format!(
-                            "phoxi_control_interface"),
+                        log::error!(target: &log_target,
                             "Photoneo failed with error: {}.", e
                         );
                         request_state = ServiceRequestState::Failed.to_string();
@@ -154,12 +162,9 @@ pub async fn photoneo_control_interface(
                     );
 
                 let modified_state = state.get_diff_partial_state(&new_state);
-                command_sender
-                    .send(StateManagement::SetPartialState(modified_state))
-                    .await?;
+                StateManager::set_state(&mut con, &modified_state).await;
             }
         }
-        interval.tick().await;
     }
 }
 
