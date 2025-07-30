@@ -1,9 +1,6 @@
-use std::error::Error;
+use std::{error::Error, sync::Arc};
 
-use tokio::{
-    sync::mpsc,
-    time::{interval, Duration},
-};
+use tokio::time::{interval, Duration};
 
 use micro_sp::*;
 use std::{fs::File, io::BufReader};
@@ -65,15 +62,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     log::info!(target: &&format!("phoxi_control_interface"), "Starting.");
 
-    let (tx, rx) = mpsc::channel(32);
-    let state_clone = state.clone();
-
-    tokio::task::spawn(async move {
-        match redis_state_manager(rx, state_clone).await {
-            Ok(()) => (),
-            Err(e) => log::error!(target: &&format!("phoxi_localization_interface"), "{}", e),
-        }
-    });
+    let connection_manager = ConnectionManager::new().await;
+    StateManager::set_state(&mut connection_manager.get_connection().await, &state).await;
+    let con_arc = Arc::new(connection_manager);
 
     tokio::task::spawn(async move {
         match photoneo_localization_interface(
@@ -81,7 +72,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             &phoxi_scans_path,
             &plcfs_path,
             &localization_interface_path,
-            tx,
+            &con_arc,
         )
         .await
         {

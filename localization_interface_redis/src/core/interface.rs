@@ -4,12 +4,12 @@ use nalgebra::{Matrix4, Quaternion, SymmetricEigen, UnitQuaternion, Vector3};
 use ordered_float::OrderedFloat;
 // use nanoid::nanoid;
 use serde_json::Value;
-use tokio::{
-    sync::{mpsc, oneshot},
-    time::{interval, Duration},
-};
+use tokio::time::{interval, Duration};
 
-use std::{sync::mpsc as sync_mpsc, time::SystemTime};
+use std::{
+    sync::{mpsc as sync_mpsc, Arc},
+    time::SystemTime,
+};
 
 use super::state::LocalizeRequest;
 
@@ -18,65 +18,84 @@ pub async fn photoneo_localization_interface(
     phoxi_scans_path: &str,
     plcfs_path: &str,
     localization_interface_path: &str,
-    command_sender: mpsc::Sender<StateManagement>,
+    connection_manager: &Arc<ConnectionManager>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut interval = interval(Duration::from_millis(100));
+    let log_target = &format!("phoxi_localization_interface");
+    log::info!(target: &log_target, "Online.");
 
-    log::info!(target: &&format!("phoxi_localization_interface"), "Online.");
+    let keys: Vec<String> = vec![
+        &format!("{}_localization_request_trigger", photoneo_id),
+        &format!("{}_localization_request_state", photoneo_id),
+        &format!("{}_localization_scene_name", photoneo_id),
+        &format!("{}_localization_target_name", photoneo_id),
+        &format!("{}_localization_source_format", photoneo_id),
+        &format!("{}_localization_stop_at_timeout", photoneo_id),
+        &format!("{}_localization_stop_at_number", photoneo_id),
+        &format!("{}_localization_settings", photoneo_id),
+        &format!("{}_localization_scanning_frame", photoneo_id),
+    ]
+    .iter()
+    .map(|k| k.to_string())
+    .collect();
 
+    let mut con = connection_manager.get_connection().await;
     loop {
-        let (response_tx, response_rx) = oneshot::channel();
-        command_sender
-            .send(StateManagement::GetState(response_tx))
-            .await?;
-        let state = response_rx.await?;
+        interval.tick().await;
+        if let Err(_) = connection_manager.check_redis_health(&log_target).await {
+            continue;
+        }
+        let state = match StateManager::get_state_for_keys(&mut con, &keys).await {
+            Some(s) => s,
+            None => continue,
+        };
 
         let mut request_trigger = state.get_bool_or_default_to_false(
-            &format!("{}_localization_interface", photoneo_id),
             &format!("{}_localization_request_trigger", photoneo_id),
+            &log_target,
         );
 
         let mut request_state = state.get_string_or_default_to_unknown(
-            &format!("{}_localization_interface", photoneo_id),
             &format!("{}_localization_request_state", photoneo_id),
+            &log_target,
         );
 
         if request_trigger {
             request_trigger = false;
             if request_state == ServiceRequestState::Initial.to_string() {
                 let scene_name = state.get_string_or_default_to_unknown(
-                    &format!("{}_localization_interface", photoneo_id),
                     &format!("{}_localization_scene_name", photoneo_id),
+                    &log_target,
                 );
 
                 let target_name = state.get_string_or_default_to_unknown(
-                    &format!("{}_localization_interface", photoneo_id),
                     &format!("{}_localization_target_name", photoneo_id),
+                    &log_target,
                 );
 
                 let source_format = state.get_string_or_default_to_unknown(
-                    &format!("{}_localization_interface", photoneo_id),
                     &format!("{}_localization_source_format", photoneo_id),
+                    &log_target,
                 );
 
                 let stop_at_timeout = state.get_int_or_default_to_zero(
-                    &format!("{}_localization_interface", photoneo_id),
                     &format!("{}_localization_stop_at_timeout", photoneo_id),
+                    &log_target,
                 );
 
                 let stop_at_number = state.get_int_or_default_to_zero(
-                    &format!("{}_localization_interface", photoneo_id),
                     &format!("{}_localization_stop_at_number", photoneo_id),
+                    &log_target,
                 );
 
                 let settings = state.get_string_or_default_to_unknown(
-                    &format!("{}_localization_interface", photoneo_id),
                     &format!("{}_localization_settings", photoneo_id),
+                    &log_target,
                 );
 
                 let scanning_frame = state.get_string_or_default_to_unknown(
-                    &format!("{}_localization_interface", photoneo_id),
                     &format!("{}_localization_scanning_frame", photoneo_id),
+                    &log_target,
                 );
 
                 let praw_dir = format!("{phoxi_scans_path}/praw");
@@ -98,7 +117,7 @@ pub async fn photoneo_localization_interface(
                 let mut success = false;
                 let mut stop_criteria_met = false;
                 let mut count = 0;
-                let mut transforms: Vec<SPTransformStamped> = vec!();
+                let mut transforms: Vec<SPTransformStamped> = vec![];
 
                 match call_blocking_exec(
                     &localize_request,
@@ -139,24 +158,24 @@ pub async fn photoneo_localization_interface(
                     .update(
                         &format!("{photoneo_id}_localization_success"),
                         success.to_spvalue(),
-                    ).update(
+                    )
+                    .update(
                         &format!("{photoneo_id}_localization_stop_criteria_met"),
                         stop_criteria_met.to_spvalue(),
-                    ).update(
+                    )
+                    .update(
                         &format!("{photoneo_id}_localization_count"),
                         (count as i64).to_spvalue(),
-                    ).update(
+                    )
+                    .update(
                         &format!("{photoneo_id}_localization_transforms"),
                         transforms.to_spvalue(),
                     );
 
                 let modified_state = state.get_diff_partial_state(&new_state);
-                command_sender
-                    .send(StateManagement::SetPartialState(modified_state))
-                    .await?;
+                StateManager::set_state(&mut con, &modified_state).await;
             }
         }
-        interval.tick().await;
     }
 }
 
@@ -265,19 +284,37 @@ impl ParsedResult {
     }
 }
 
-fn quaternion_from_matrix(matrix: &Matrix4<f64>) -> UnitQuaternion<f64> {
+fn _quaternion_from_matrix(matrix: &Matrix4<f64>) -> UnitQuaternion<f64> {
     // Extract the elements of the 3x3 rotation submatrix
-    let m00 = matrix[(0, 0)]; let m01 = matrix[(0, 1)]; let m02 = matrix[(0, 2)];
-    let m10 = matrix[(1, 0)]; let m11 = matrix[(1, 1)]; let m12 = matrix[(1, 2)];
-    let m20 = matrix[(2, 0)]; let m21 = matrix[(2, 1)]; let m22 = matrix[(2, 2)];
+    let m00 = matrix[(0, 0)];
+    let m01 = matrix[(0, 1)];
+    let m02 = matrix[(0, 2)];
+    let m10 = matrix[(1, 0)];
+    let m11 = matrix[(1, 1)];
+    let m12 = matrix[(1, 2)];
+    let m20 = matrix[(2, 0)];
+    let m21 = matrix[(2, 1)];
+    let m22 = matrix[(2, 2)];
 
     // Build the symmetric matrix K, just like in the Python code.
     // We create the full symmetric matrix for clarity.
     let mut k = Matrix4::new(
-        m00 - m11 - m22, m01 + m10,       m02 + m20,       m21 - m12,
-        m01 + m10,       m11 - m00 - m22, m12 + m21,       m02 - m20,
-        m02 + m20,       m12 + m21,       m22 - m00 - m11, m10 - m01,
-        m21 - m12,       m02 - m20,       m10 - m01,       m00 + m11 + m22,
+        m00 - m11 - m22,
+        m01 + m10,
+        m02 + m20,
+        m21 - m12,
+        m01 + m10,
+        m11 - m00 - m22,
+        m12 + m21,
+        m02 - m20,
+        m02 + m20,
+        m12 + m21,
+        m22 - m00 - m11,
+        m10 - m01,
+        m21 - m12,
+        m02 - m20,
+        m10 - m01,
+        m00 + m11 + m22,
     );
     k /= 3.0;
 
@@ -393,8 +430,6 @@ fn parse_float(data: &[u8]) -> Option<f64> {
     None
 }
 
-
-
 // fn make_transforms(matrices: &[(MatrixDataInternal, String)], scanning_frame: &str) -> Vec<SPTransformStamped> {
 //     matrices
 //         .iter()
@@ -455,11 +490,12 @@ fn parse_float(data: &[u8]) -> Option<f64> {
 //         // .collect()
 // }
 
-
-
 type MatrixDataInternal = [[f64; 4]; 4];
 
-pub fn make_transforms(matrices: &[(MatrixDataInternal, String)], scanning_frame: &str) -> Vec<SPTransformStamped> {
+pub fn make_transforms(
+    matrices: &[(MatrixDataInternal, String)],
+    scanning_frame: &str,
+) -> Vec<SPTransformStamped> {
     let mut transforms: Vec<SPTransformStamped> = Vec::new();
 
     for (_i, (matrix_array, name)) in matrices.iter().enumerate() {
