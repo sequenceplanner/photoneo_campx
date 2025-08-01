@@ -1,8 +1,5 @@
 use crate::*;
-// use micro_sp::*;
-use nalgebra::{Matrix4, Quaternion, SymmetricEigen, UnitQuaternion, Vector3};
 use ordered_float::OrderedFloat;
-// use nanoid::nanoid;
 use serde_json::Value;
 use tokio::time::{interval, Duration};
 
@@ -288,69 +285,6 @@ impl ParsedResult {
     }
 }
 
-fn _quaternion_from_matrix(matrix: &Matrix4<f64>) -> UnitQuaternion<f64> {
-    // Extract the elements of the 3x3 rotation submatrix
-    let m00 = matrix[(0, 0)];
-    let m01 = matrix[(0, 1)];
-    let m02 = matrix[(0, 2)];
-    let m10 = matrix[(1, 0)];
-    let m11 = matrix[(1, 1)];
-    let m12 = matrix[(1, 2)];
-    let m20 = matrix[(2, 0)];
-    let m21 = matrix[(2, 1)];
-    let m22 = matrix[(2, 2)];
-
-    // Build the symmetric matrix K, just like in the Python code.
-    // We create the full symmetric matrix for clarity.
-    let mut k = Matrix4::new(
-        m00 - m11 - m22,
-        m01 + m10,
-        m02 + m20,
-        m21 - m12,
-        m01 + m10,
-        m11 - m00 - m22,
-        m12 + m21,
-        m02 - m20,
-        m02 + m20,
-        m12 + m21,
-        m22 - m00 - m11,
-        m10 - m01,
-        m21 - m12,
-        m02 - m20,
-        m10 - m01,
-        m00 + m11 + m22,
-    );
-    k /= 3.0;
-
-    // Quaternion is the eigenvector of K that corresponds to the largest eigenvalue.
-    // nalgebra's SymmetricEigen is the equivalent of numpy.linalg.eigh.
-    let eig = SymmetricEigen::new(k);
-
-    // Find the index of the largest eigenvalue.
-    let max_eigenvalue_index = eig.eigenvalues.imax();
-
-    // Get the corresponding eigenvector (which is a column).
-    let eigenvector = eig.eigenvectors.column(max_eigenvalue_index);
-
-    // Reorder the eigenvector components to form the quaternion [w, x, y, z].
-    // This matches the Python line: `q = V[[3, 0, 1, 2], numpy.argmax(w)]`
-    let w = eigenvector[3];
-    let x = eigenvector[0];
-    let y = eigenvector[1];
-    let z = eigenvector[2];
-
-    let mut quat = Quaternion::new(w, x, y, z);
-
-    // Ensure w is non-negative, as is convention.
-    // `if q[0] < 0.0: numpy.negative(q, q)`
-    if quat.w < 0.0 {
-        quat = -quat;
-    }
-
-    // Return as a UnitQuaternion, which is normalized and represents a pure rotation.
-    UnitQuaternion::from_quaternion(quat)
-}
-
 fn parse_result(request: &LocalizeRequest, data: &[Vec<u8>]) -> ParsedResult {
     let mut parsed = ParsedResult::new();
     let mut result_lines: Vec<usize> = Vec::new();
@@ -434,67 +368,41 @@ fn parse_float(data: &[u8]) -> Option<f64> {
     None
 }
 
-// fn make_transforms(matrices: &[(MatrixDataInternal, String)], scanning_frame: &str) -> Vec<SPTransformStamped> {
-//     matrices
-//         .iter()
-//         .enumerate()
-//         .map(|(i, (matrix_array, child_name))| {
-//             let matrix = Matrix4::from(*matrix_array);
-
-//             // In a real app, you'd use a logger like `tracing::info!` or `log::info!`.
-//             // println!("MATRIX: {}", matrix);
-
-//             let rotation_part = matrix.fixed_slice::<3, 3>(0, 0).into_owned();
-//             // let q = UnitQuaternion::from_rotation_matrix(&rotation_part);
-//             let unit_quaternion = UnitQuaternion::from_matrix(&rotation_part);
-//             let q: &Quaternion<f64> = unit_quaternion.quaternion();
-
-//             // 2. Extract the translation vector from the last column.
-//             let translation_part = matrix.column(3).xyz();
-
-//             let child_frame_id = format!("{}_instance_{}", child_name, nanoid::nanoid!(6));
-
-//         let main_tf = SPTransformStamped {
-//             active_transform: true,
-//             enable_transform: true,
-//             time_stamp: SystemTime::now(),
-//             parent_frame_id: scanning_frame.to_string(),
-//             child_frame_id,
-//             transform: SPTransform {
-//                 translation: SPTranslation {
-//                     x: OrderedFloat(translation_part.x / 1000.0),
-//                     y: OrderedFloat(translation_part.y / 1000.0),
-//                     z: OrderedFloat(translation_part.z / 1000.0),
-//                 },
-//                 rotation: SPRotation {
-//                     x: OrderedFloat(q.i),
-//                     y: OrderedFloat(q.j),
-//                     z: OrderedFloat(q.k),
-//                     w: OrderedFloat(q.w),
-//                 },
-//             },
-//             metadata: MapOrUnknown::UNKNOWN,
-//         };
-//         main_tf}).collect()
-
-//             // 3. Construct the TransformStamped message (same as before).
-//         //     let mut main_tf = TransformStamped::default();
-//         //     main_tf.header.frame_id = "photoneo_sensor".to_string();
-//         //     main_tf.child_frame_id = format!("{}_instance_{:02}", child_name, i);
-//         //     main_tf.transform.translation.x = translation_part.x / 1000.0;
-//         //     main_tf.transform.translation.y = translation_part.y / 1000.0;
-//         //     main_tf.transform.translation.z = translation_part.z / 1000.0;
-//         //     main_tf.transform.rotation.x = quaternion.x;
-//         //     main_tf.transform.rotation.y = quaternion.y;
-//         //     main_tf.transform.rotation.z = quaternion.z;
-//         //     main_tf.transform.rotation.w = quaternion.w;
-
-//         //     main_tf
-//         // })
-//         // .collect()
-// }
-
 type MatrixDataInternal = [[f64; 4]; 4];
+
+fn rotation_matrix_to_quaternion(m: &[[f64; 3]; 3]) -> (f64, f64, f64, f64) {
+    let trace = m[0][0] + m[1][1] + m[2][2];
+    let (w, x, y, z);
+
+    if trace > 0.0 {
+        let s = (trace + 1.0).sqrt() * 2.0;
+        w = 0.25 * s;
+        x = (m[2][1] - m[1][2]) / s;
+        y = (m[0][2] - m[2][0]) / s;
+        z = (m[1][0] - m[0][1]) / s;
+    } else if (m[0][0] > m[1][1]) && (m[0][0] > m[2][2]) {
+        let s = (1.0 + m[0][0] - m[1][1] - m[2][2]).sqrt() * 2.0;
+        w = (m[2][1] - m[1][2]) / s;
+        x = 0.25 * s;
+        y = (m[0][1] + m[1][0]) / s;
+        z = (m[0][2] + m[2][0]) / s;
+    } else if m[1][1] > m[2][2] {
+        let s = (1.0 + m[1][1] - m[0][0] - m[2][2]).sqrt() * 2.0;
+        w = (m[0][2] - m[2][0]) / s;
+        x = (m[0][1] + m[1][0]) / s;
+        y = 0.25 * s;
+        z = (m[1][2] + m[2][1]) / s;
+    } else {
+        let s = (1.0 + m[2][2] - m[0][0] - m[1][1]).sqrt() * 2.0;
+        w = (m[1][0] - m[0][1]) / s;
+        x = (m[0][2] + m[2][0]) / s;
+        y = (m[1][2] + m[2][1]) / s;
+        z = 0.25 * s;
+    }
+
+    (w, x, y, z)
+}
+
 
 pub fn make_transforms(
     matrices: &[(MatrixDataInternal, String)],
@@ -502,53 +410,42 @@ pub fn make_transforms(
 ) -> Vec<SPTransformStamped> {
     let mut transforms: Vec<SPTransformStamped> = Vec::new();
 
-    for (_i, (matrix_array, name)) in matrices.iter().enumerate() {
-        let m = matrix_array;
-        // let transformation_matrix = Matrix4::new(
-        //     m[0][0], m[1][0], m[2][0], m[3][0], m[0][1], m[1][1], m[2][1], m[3][1], m[0][2],
-        //     m[1][2], m[2][2], m[3][2], m[0][3], m[1][3], m[2][3], m[3][3],
-        // );
-        let transformation_matrix = Matrix4::new(
-            m[0][0], m[0][1], m[0][2], m[0][3], m[1][0], m[1][1], m[1][2], m[1][3], m[2][0],
-            m[2][1], m[2][2], m[2][3], m[3][0], m[3][1], m[3][2], m[3][3],
-        );
-        // let transformation_matrix = Matrix4::from(*matrix_array);
+    for (matrix, child_frame_id) in matrices {
+        let translation = SPTranslation {
+            x: OrderedFloat(matrix[0][3]),
+            y: OrderedFloat(matrix[1][3]),
+            z: OrderedFloat(matrix[2][3]),
+        };
 
-        log::info!(target: "phoxi_localization_interface", "Processing matrix for {}: {:?}", name, transformation_matrix);
+        let rotation_matrix = [
+            [matrix[0][0], matrix[0][1], matrix[0][2]],
+            [matrix[1][0], matrix[1][1], matrix[1][2]],
+            [matrix[2][0], matrix[2][1], matrix[2][2]],
+        ];
 
-        let translation_vec = Vector3::new(m[0][3], m[1][3], m[2][3]); //transformation_matrix.column(3).xyz(); //Vector3::new(m[0][3], m[1][3], m[2][3]);
+        let (w, x, y, z) = rotation_matrix_to_quaternion(&rotation_matrix);
+        let rotation = SPRotation {
+            x: OrderedFloat(x),
+            y: OrderedFloat(y),
+            z: OrderedFloat(z),
+            w: OrderedFloat(w),
+        };
 
-        let rotation_matrix = transformation_matrix.fixed_view::<3, 3>(0, 0).into_owned();
-        // let q = quaternion_from_matrix(&transformation_matrix);
-
-        let unit_quaternion = UnitQuaternion::from_matrix(&rotation_matrix);
-        let q: &Quaternion<f64> = unit_quaternion.quaternion();
-
-        let child_frame_id = format!("{}_instance_{}", name, nanoid::nanoid!(6));
-
-        let main_tf = SPTransformStamped {
+        let transform_stamped = SPTransformStamped {
             active_transform: true,
             enable_transform: true,
             time_stamp: SystemTime::now(),
             parent_frame_id: scanning_frame.to_string(),
-            child_frame_id,
+            child_frame_id: child_frame_id.clone(),
             transform: SPTransform {
-                translation: SPTranslation {
-                    x: OrderedFloat(translation_vec.x / 1000.0),
-                    y: OrderedFloat(translation_vec.y / 1000.0),
-                    z: OrderedFloat(translation_vec.z / 1000.0),
-                },
-                rotation: SPRotation {
-                    x: OrderedFloat(q.w),
-                    y: OrderedFloat(q.i),
-                    z: OrderedFloat(q.j),
-                    w: OrderedFloat(q.k),
-                },
+                translation,
+                rotation,
             },
+
             metadata: MapOrUnknown::UNKNOWN,
         };
 
-        transforms.push(main_tf);
+        transforms.push(transform_stamped);
     }
 
     transforms
