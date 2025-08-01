@@ -34,6 +34,10 @@ pub async fn photoneo_localization_interface(
         &format!("{}_localization_stop_at_number", photoneo_id),
         &format!("{}_localization_settings", photoneo_id),
         &format!("{}_localization_scanning_frame", photoneo_id),
+        &format!("{}_localization_success", photoneo_id),
+        &format!("{}_localization_stop_criteria_met", photoneo_id),
+        &format!("{}_localization_count", photoneo_id),
+        &format!("{}_localization_transforms", photoneo_id),
     ]
     .iter()
     .map(|k| k.to_string())

@@ -29,6 +29,7 @@ pub async fn photoneo_control_interface(
         &format!("{}_tif", photoneo_id),
         &format!("{}_timeout", photoneo_id),
         &format!("{}_settings", photoneo_id),
+        &format!("{}_phoxi_raw_info", photoneo_id),
     ]
     .iter()
     .map(|k| k.to_string())
