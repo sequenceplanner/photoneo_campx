@@ -285,6 +285,14 @@ impl ParsedResult {
     }
 }
 
+// C++ documentation
+// Typedef Documentation
+// typedef std::array<std::array<float, 4>, 4> TransformationMatrix4x4
+// Transformation matrix 4x4 t
+// t[0][0]  t[0][1] t[0][2] t[0][3]       r[0][0] r[0][1] r[0][2] 	Tx
+// t[1][0]  t[1][1] t[1][2] t[1][3]   =   r[1][0] r[1][1] r[1][2] 	Ty
+// t[2][0]  t[2][1] t[2][2] t[2][3]       r[2][0] r[2][1] r[2][2] 	Tz
+// t[3][0]  t[3][1] t[3][2] t[3][3]             0       0       0 	 1
 fn parse_result(request: &LocalizeRequest, data: &[Vec<u8>]) -> ParsedResult {
     let mut parsed = ParsedResult::new();
     let mut result_lines: Vec<usize> = Vec::new();
@@ -335,12 +343,12 @@ fn parse_result(request: &LocalizeRequest, data: &[Vec<u8>]) -> ParsedResult {
                 ],
                 request.target_name.clone(),
             ));
-
-            log::info!(target: &&format!(
-                "phoxi_localization_interface"),
-                "DETECTED ITEMS: {:?}", parsed.results
-            );
         }
+
+        log::info!(target: &&format!(
+            "phoxi_localization_interface"),
+            "DETECTED ITEMS: {:?}", parsed.results
+        );
     }
 
     parsed.count = parsed.results.len();
@@ -403,7 +411,6 @@ fn rotation_matrix_to_quaternion(m: &[[f64; 3]; 3]) -> (f64, f64, f64, f64) {
     (w, x, y, z)
 }
 
-
 pub fn make_transforms(
     matrices: &[(MatrixDataInternal, String)],
     scanning_frame: &str,
@@ -431,12 +438,13 @@ pub fn make_transforms(
             w: OrderedFloat(w),
         };
 
+        let unique_child_frame_id = format!("{}_{}", child_frame_id, nanoid::nanoid!(6));
         let transform_stamped = SPTransformStamped {
             active_transform: true,
             enable_transform: true,
             time_stamp: SystemTime::now(),
             parent_frame_id: scanning_frame.to_string(),
-            child_frame_id: child_frame_id.clone(),
+            child_frame_id: unique_child_frame_id.clone(),
             transform: SPTransform {
                 translation,
                 rotation,
