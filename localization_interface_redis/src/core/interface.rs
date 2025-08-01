@@ -412,9 +412,9 @@ pub fn make_transforms(
 
     for (matrix, child_frame_id) in matrices {
         let translation = SPTranslation {
-            x: OrderedFloat(matrix[0][3]),
-            y: OrderedFloat(matrix[1][3]),
-            z: OrderedFloat(matrix[2][3]),
+            x: OrderedFloat(matrix[0][3] / 1000.0),
+            y: OrderedFloat(matrix[1][3] / 1000.0),
+            z: OrderedFloat(matrix[2][3] / 1000.0),
         };
 
         let rotation_matrix = [
